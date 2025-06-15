@@ -194,8 +194,17 @@
         import { getFirestore, collection, doc, addDoc, getDoc, deleteDoc, onSnapshot, updateDoc, increment, setDoc, arrayUnion, arrayRemove, writeBatch, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "YOUR_API_KEY", authDomain: "YOUR_AUTH_DOMAIN", projectId: "YOUR_PROJECT_ID" };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-board-game-pwa';
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDlB0PII1L5M8ojUXXsQ5kkJB8jUACkyK0",
+            authDomain: "gametracker-45957.firebaseapp.com",
+            projectId: "gametracker-45957",
+            storageBucket: "gametracker-45957.appspot.com",
+            messagingSenderId: "960845458759",
+            appId: "1:960845458759:web:9b0e89be74d09910337062"
+        };
+
+        const appId = 'gametracker-45957'; // Using your projectId as a default app ID
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
