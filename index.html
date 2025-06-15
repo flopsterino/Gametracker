@@ -96,8 +96,8 @@
                         <h3 class="text-xl font-semibold">2. Select Players for this Game</h3>
                         <div class="flex flex-col md:flex-row gap-4">
                             <div class="w-full md:w-1/2">
-                                <h4 class="font-semibold mb-2 text-gray-300">Available Players</h4>
-                                <div id="lobby-available-players" class="space-y-2 max-h-48 overflow-y-auto p-2 bg-gray-800 rounded-md border border-gray-700"></div>
+                                <h4 class="font-semibold mb-2 text-gray-300">Add a Player</h4>
+                                <select id="lobby-available-players-select" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white"></select>
                             </div>
                             <div class="w-full md:w-1/2">
                                 <h4 class="font-semibold mb-2 text-gray-300">Selected Players (Drag to Reorder)</h4>
@@ -239,7 +239,7 @@
         const lobbyInviteCode = document.getElementById('lobby-invite-code');
         const lobbyParticipantList = document.getElementById('lobby-participant-list');
         const lobbyGameSelect = document.getElementById('lobby-game-select');
-        const lobbyAvailablePlayers = document.getElementById('lobby-available-players');
+        const lobbyAvailablePlayersSelect = document.getElementById('lobby-available-players-select');
         const lobbySelectedPlayers = document.getElementById('lobby-selected-players');
         const lobbyStartGameBtn = document.getElementById('lobby-start-game-btn');
         const leaveSessionBtn = document.getElementById('leave-session-btn');
@@ -395,6 +395,14 @@
                     scoreInputLabel.textContent = "Winning Score";
                 }
             });
+            lobbyAvailablePlayersSelect.addEventListener('change', (e) => {
+                const playerId = e.target.value;
+                if(playerId) {
+                    state.lobbySelectedPlayerIds.push(playerId);
+                    renderLobbyPlayerSelection();
+                    e.target.value = ""; // Reset dropdown
+                }
+            });
         }
         
         function renderLobbyGameSelect() {
@@ -448,14 +456,16 @@
         }
 
         function renderLobbyPlayerSelection() {
-            lobbyAvailablePlayers.innerHTML = '';
-            lobbySelectedPlayers.innerHTML = '';
             const available = state.players.filter(p => !state.lobbySelectedPlayerIds.includes(p.id));
+            lobbyAvailablePlayersSelect.innerHTML = '<option value="">-- Add a Player --</option>';
             available.forEach(p => {
-                const div = createPlayerListItem(p, false);
-                div.onclick = () => { state.lobbySelectedPlayerIds.push(p.id); renderLobbyPlayerSelection(); };
-                lobbyAvailablePlayers.appendChild(div);
+                const option = document.createElement('option');
+                option.value = p.id;
+                option.textContent = p.name;
+                lobbyAvailablePlayersSelect.appendChild(option);
             });
+
+            lobbySelectedPlayers.innerHTML = '';
             state.lobbySelectedPlayerIds.forEach(id => {
                 const player = state.players.find(p => p.id === id);
                 if (player) {
@@ -744,7 +754,7 @@
             stopTimer();
             const { condition, gameId } = state.currentSession.currentGame;
             const players = [...state.currentSession.currentGame.players];
-            players.sort((a,b) => condition === 'highest' ? b.score - a.score : a.score - b.score);
+            players.sort((a,b) => (condition === 'highest' || condition === 'bestOf') ? b.score - a.score : a.score - b.score);
             const winnerScore = players[0].score;
             const winnerIds = players.filter(p => p.score === winnerScore).map(p => p.id);
             
@@ -881,7 +891,7 @@
                 const p = document.createElement('p');
                 p.className = 'text-lg p-2 rounded-md';
                 let highlightClass = '';
-                if (condition === 'highest' && player.score === winnerScore) highlightClass = 'bg-green-500 text-white font-bold';
+                if ((condition === 'highest' || condition === 'bestOf') && player.score === winnerScore) highlightClass = 'bg-green-500 text-white font-bold';
                 else if (condition === 'lowest') {
                     if (player.score === winnerScore) highlightClass = 'bg-green-500 text-white font-bold';
                     const maxScore = Math.max(...players.map(p => p.score));
