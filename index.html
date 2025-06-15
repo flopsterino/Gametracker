@@ -43,7 +43,7 @@
     
     <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-90 flex flex-col items-center justify-center z-50">
         <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-32 w-32 mb-4"></div>
-        <h2 class="text-center text-white text-xl font-semibold">Connecting...</h2>
+        <h2 id="loading-message" class="text-center text-white text-xl font-semibold">Connecting...</h2>
         <p class="w-1/2 text-center text-white mt-2">Getting things ready for your game night.</p>
     </div>
 
@@ -206,6 +206,7 @@
 
         // DOM Elements
         const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingMessage = document.getElementById('loading-message');
         const notification = document.getElementById('notification');
         const setupScreen = document.getElementById('setup-screen');
         const lobbyScreen = document.getElementById('lobby-screen');
@@ -267,11 +268,22 @@
         };
         
         let gamesCollection, playersCollection, sessionsCollection;
+        let authReady = false;
 
         // --- Authentication ---
+        const connectionTimeout = setTimeout(() => {
+            if (!authReady) {
+                loadingMessage.textContent = "Connection Failed";
+                document.querySelector('#loading-overlay .loader').classList.add('hidden');
+                showNotification("Could not connect. Please check your network and refresh.", true, 10000);
+            }
+        }, 10000); // 10-second timeout
+
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                if (userId !== user.uid) {
+                if (!authReady) {
+                    authReady = true;
+                    clearTimeout(connectionTimeout);
                     userId = user.uid;
                     initApp();
                 }
@@ -280,6 +292,7 @@
                     await signInAnonymously(auth);
                 } catch (error) {
                     console.error("Anonymous sign-in failed:", error);
+                    clearTimeout(connectionTimeout);
                     loadingOverlay.classList.add('hidden');
                     showNotification("Could not connect to the database. Some features might be unavailable.", true);
                 }
@@ -293,12 +306,18 @@
                 loadingOverlay.classList.add('hidden');
                 return;
             }
-            gamesCollection = collection(db, `artifacts/${appId}/users/${userId}/games`);
-            playersCollection = collection(db, `artifacts/${appId}/users/${userId}/players`);
-            sessionsCollection = collection(db, `artifacts/${appId}/public/data/sessions`);
-            setupEventListeners();
-            loadInitialData();
-            loadingOverlay.classList.add('hidden');
+            try {
+                gamesCollection = collection(db, `artifacts/${appId}/users/${userId}/games`);
+                playersCollection = collection(db, `artifacts/${appId}/users/${userId}/players`);
+                sessionsCollection = collection(db, `artifacts/${appId}/public/data/sessions`);
+                setupEventListeners();
+                loadInitialData();
+                loadingOverlay.classList.add('hidden');
+            } catch (error) {
+                console.error("Initialization failed: ", error);
+                loadingOverlay.classList.add('hidden');
+                showNotification("An error occurred loading the app.", true);
+            }
         }
 
         async function loadInitialData() {
@@ -306,11 +325,12 @@
                 state.games = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderGameList();
                 renderLobbyGameSelect();
-            });
+            }, (error) => { console.error("Error loading games:", error); showNotification("Could not load games.", true); });
+
             onSnapshot(playersCollection, (snapshot) => {
                 state.players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderPlayerList();
-            });
+            }, (error) => { console.error("Error loading players:", error); showNotification("Could not load players.", true); });
         }
         
         function setupEventListeners() {
@@ -746,7 +766,7 @@
         function handleDrop(e) { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); const fromIndex = state.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length; const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.lobbySelectedPlayerIds.splice(toIndex, 0, item); renderLobbyPlayerSelection(); }
         
         const manifest = { "name": "Board Game Score Tracker", "short_name": "ScoreTrack", "start_url": ".", "display": "standalone", "background_color": "#111827", "theme_color": "#1f2937", "description": "A PWA to track scores for your board game nights.", "icons": [{"src": "https://placehold.co/192x192/000000/ffffff?text=BGS","sizes": "192x192","type": "image/png"}, {"src": "https://placehold.co/512x512/000000/ffffff?text=BGS","sizes": "512x512","type": "image/png"}] };
-        const swContent = `const CACHE_NAME='board-game-scorer-v17';const urlsToCache=['/','index.html','https://cdn.tailwindcss.com'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(urlsToCache))));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`;
+        const swContent = `const CACHE_NAME='board-game-scorer-v18';const urlsToCache=['/','index.html','https://cdn.tailwindcss.com'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(urlsToCache))));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`;
         const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
         const manifestURL = URL.createObjectURL(manifestBlob);
         document.querySelector('link[rel="manifest"]').setAttribute('href', manifestURL);
