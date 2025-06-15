@@ -371,8 +371,14 @@
                 }
                 endGameModal.classList.add('hidden');
             });
+            // Touch and Mouse Drag Events
+            lobbySelectedPlayers.addEventListener('dragstart', handleDragStart);
+            lobbySelectedPlayers.addEventListener('dragend', handleDragEnd);
             lobbySelectedPlayers.addEventListener('dragover', handleDragOver);
             lobbySelectedPlayers.addEventListener('drop', handleDrop);
+            lobbySelectedPlayers.addEventListener('touchstart', handleTouchStart, { passive: false });
+            lobbySelectedPlayers.addEventListener('touchmove', handleTouchMove, { passive: false });
+            lobbySelectedPlayers.addEventListener('touchend', handleTouchEnd);
         }
         
         function renderLobbyGameSelect() {
@@ -452,8 +458,6 @@
                 div.classList.add('bg-blue-600', 'hover:bg-blue-700', 'text-white');
                 div.draggable = true;
                 div.innerHTML = `<span>${player.name}</span> <span class="text-gray-300">☰</span>`;
-                div.addEventListener('dragstart', handleDragStart);
-                div.addEventListener('dragend', handleDragEnd);
             } else {
                 div.classList.add('bg-gray-700', 'hover:bg-gray-600');
                 div.textContent = player.name;
@@ -784,6 +788,37 @@
         function getDragAfterElement(container, y) { const draggableElements = [...container.querySelectorAll('.player-list-item:not(.dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
         function handleDrop(e) { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); const fromIndex = state.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length; const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.lobbySelectedPlayerIds.splice(toIndex, 0, item); renderLobbyPlayerSelection(); }
         
+        let touchStartY = 0;
+        function handleTouchStart(e) {
+            const target = e.target.closest('.player-list-item');
+            if (!target) return;
+            draggedItem = target;
+            touchStartY = e.touches[0].clientY;
+            draggedItem.classList.add('dragging');
+        }
+        function handleTouchMove(e) {
+            if (!draggedItem) return;
+            e.preventDefault();
+            const y = e.touches[0].clientY;
+            draggedItem.style.transform = `translateY(${y - touchStartY}px)`;
+            const afterElement = getDragAfterElement(lobbySelectedPlayers, y);
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            if (afterElement) afterElement.classList.add('drag-over');
+        }
+        function handleTouchEnd(e) {
+            if (!draggedItem) return;
+            draggedItem.classList.remove('dragging');
+            draggedItem.style.transform = '';
+            const id = draggedItem.dataset.id;
+            const fromIndex = state.lobbySelectedPlayerIds.indexOf(id);
+            const afterElement = getDragAfterElement(lobbySelectedPlayers, e.changedTouches[0].clientY);
+            const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length;
+            const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0];
+            state.lobbySelectedPlayerIds.splice(toIndex, 0, item);
+            renderLobbyPlayerSelection();
+            draggedItem = null;
+        }
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
