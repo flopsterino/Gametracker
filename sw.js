@@ -1,12 +1,11 @@
 // A unique name for the cache. Using a version number helps in updating the cache when the app is updated.
-const CACHE_NAME = 'board-game-scorer-v22';
+const CACHE_NAME = 'board-game-scorer-v23';
 
 // A list of the essential files the app needs to work offline.
 const urlsToCache = [
   '/', // The root of the site
   'index.html',
   'manifest.json',
-  'https://cdn.tailwindcss.com' // Caching the CSS framework
 ];
 
 // 'install' event: This is fired when the service worker is first installed.
@@ -14,12 +13,17 @@ self.addEventListener('install', event => {
   // We use event.waitUntil to ensure that the service worker doesn't finish installing
   // until the caching is complete.
   event.waitUntil(
-    // Open the cache by name.
     caches.open(CACHE_NAME)
-      .then(cache => {
+      .then(async (cache) => {
         console.log('Opened cache');
-        // Add all the specified assets to the cache.
-        return cache.addAll(urlsToCache);
+        // Add the main app files to the cache.
+        await cache.addAll(urlsToCache);
+        
+        // Fetch and cache the Tailwind CSS file with 'no-cors' mode.
+        // This allows us to cache the file from the CDN without a CORS error.
+        const tailwindRequest = new Request('https://cdn.tailwindcss.com', { mode: 'no-cors' });
+        const tailwindResponse = await fetch(tailwindRequest);
+        return cache.put(tailwindRequest, tailwindResponse);
       })
   );
 });
