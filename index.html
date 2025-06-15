@@ -501,10 +501,10 @@
             state.gameState = gameState;
             const gameInfo = state.games.find(g => g.id === gameState.gameId);
             if (!gameInfo) { showNotification("Game data not found!"); leaveSession(); return; }
-            state.currentGame = gameInfo;
+            state.currentGame = gameState; 
             
-            targetScoreLabel.textContent = gameInfo.condition === 'bestOf' ? "Total Tickets" : "Target Score";
-            targetScoreDisplay.textContent = `${gameInfo.winningScore} ${gameInfo.condition === 'bestOf' ? 'Tickets' : 'pts'}`;
+            targetScoreLabel.textContent = gameState.condition === 'bestOf' ? "Total Tickets" : "Target Score";
+            targetScoreDisplay.textContent = `${gameState.winningScore} ${gameState.condition === 'bestOf' ? 'Tickets' : 'pts'}`;
 
             gameTitleDisplay.textContent = gameInfo.name;
             roundCounter.textContent = gameState.round;
@@ -667,7 +667,7 @@
                 let newPlayers = JSON.parse(JSON.stringify(state.gameState.players));
                 let player = newPlayers[playerIndex];
                 player.roundScores[state.gameState.round] = score;
-                if (state.currentGame.condition !== 'bestOf') {
+                if (state.currentSession.currentGame.condition !== 'bestOf') {
                     player.score += score;
                 }
                 updateSession({ [`currentGame.players`]: newPlayers }).then(() => {
@@ -694,16 +694,16 @@
         }
         
         async function endRound() {
-            if (state.currentSession.hostId !== userId || state.currentGame.condition === 'bestOf') return;
+            if (state.currentSession.hostId !== userId || state.currentSession.currentGame.condition === 'bestOf') return;
             
             await updateSession({ [`currentGame.round`]: increment(1) });
             checkForWinner(state.gameState.players);
         }
 
         async function checkForWinner(currentPlayers) {
-            if (!state.currentGame || !Array.isArray(currentPlayers)) return;
+            if (!state.currentSession.currentGame || !Array.isArray(currentPlayers)) return;
             let updates = {};
-            const { winningScore, condition, finalRoundMode } = state.currentGame;
+            const { winningScore, condition, finalRoundMode } = state.currentSession.currentGame;
             
             let isFinished = false;
 
@@ -713,7 +713,7 @@
                     isFinished = true;
                 }
             } else {
-                let { isFinalPhase, potentialWinnerStreak, lastRoundLeaderId } = state.gameState;
+                let { isFinalPhase, potentialWinnerStreak, lastRoundLeaderId } = state.currentSession.currentGame;
                 if (currentPlayers.some(p => p.score >= winningScore)) {
                     updates["currentGame.isFinalPhase"] = true;
                     isFinalPhase = true;
@@ -742,21 +742,20 @@
 
         async function triggerEndGame(title) {
             stopTimer();
-            const { condition } = state.currentGame;
-            const players = [...state.gameState.players];
+            const { condition, gameId } = state.currentSession.currentGame;
+            const players = [...state.currentSession.currentGame.players];
             players.sort((a,b) => condition === 'highest' ? b.score - a.score : a.score - b.score);
             const winnerScore = players[0].score;
             const winnerIds = players.filter(p => p.score === winnerScore).map(p => p.id);
             
             winnerIds.forEach(id => {
                 state.sessionStats.totalWins[id] = (state.sessionStats.totalWins[id] || 0) + 1;
-                const gameId = state.currentGame.gameId;
                 if (!state.sessionStats.gameWins[gameId]) state.sessionStats.gameWins[gameId] = {};
                 state.sessionStats.gameWins[gameId][id] = (state.sessionStats.gameWins[gameId][id] || 0) + 1;
             });
             
             const batch = writeBatch(db);
-            const gameRef = doc(gamesCollection, state.currentGame.gameId);
+            const gameRef = doc(gamesCollection, gameId);
             winnerIds.forEach(id => batch.update(gameRef, {[`winCounts.${id}`]: increment(1)}));
             for(const player of players) {
                 const playerRef = doc(playersCollection, player.id);
@@ -860,7 +859,12 @@
             const gameToPlay = state.games.find(g => g.id === selectedGameId);
             localStorage.setItem('lastPlayedGameId', selectedGameId);
             const initialGameState = {
-                gameId: gameToPlay.id, round: 1, startTime: Date.now(),
+                gameId: gameToPlay.id,
+                winningScore: gameToPlay.winningScore,
+                condition: gameToPlay.condition,
+                finalRoundMode: gameToPlay.finalRoundMode,
+                round: 1, 
+                startTime: Date.now(),
                 players: selectedPlayerIds.map(id => ({ id, score: 0, roundScores: {} })),
                 isFinalPhase: false, isFinished: false,
                 potentialWinnerStreak: 0, lastRoundLeaderId: null,
@@ -915,10 +919,10 @@
         let draggedItem = null;
         let touchStartY = 0;
         function handleDragStart(e) { draggedItem = e.target; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', e.target.dataset.id); setTimeout(() => e.target.classList.add('dragging'), 0); }
-        function handleDragEnd(e) { e.target.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
+        function handleDragEnd(e) { if(draggedItem) draggedItem.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
         function handleDragOver(e) { e.preventDefault(); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over'); }
         function getDragAfterElement(container, y) { const draggableElements = [...container.querySelectorAll('.player-list-item:not(.dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
-        function handleDrop(e) { e.preventDefault(); const id = draggedItem.dataset.id; const fromIndex = state.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.changedTouches ? e.changedTouches[0].clientY : e.clientY); const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length; const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.lobbySelectedPlayerIds.splice(toIndex, 0, item); renderLobbyPlayerSelection(); }
+        function handleDrop(e) { e.preventDefault(); if(!draggedItem) return; const id = draggedItem.dataset.id; const fromIndex = state.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.changedTouches ? e.changedTouches[0].clientY : e.clientY); const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length; const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.lobbySelectedPlayerIds.splice(toIndex, 0, item); renderLobbyPlayerSelection(); }
         function handleTouchStart(e) { const target = e.target.closest('.player-list-item'); if (!target) return; draggedItem = target; touchStartY = e.touches[0].clientY; draggedItem.classList.add('dragging'); e.preventDefault();}
         function handleTouchMove(e) { if (!draggedItem) return; e.preventDefault(); const y = e.touches[0].clientY; draggedItem.style.transform = `translateY(${y - touchStartY}px)`; const afterElement = getDragAfterElement(lobbySelectedPlayers, y); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over');}
         function handleTouchEnd(e) { if (!draggedItem) return; draggedItem.classList.remove('dragging'); draggedItem.style.transform = ''; handleDrop(e); draggedItem = null;}
