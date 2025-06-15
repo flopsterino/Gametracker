@@ -333,10 +333,8 @@
                 return;
             }
             try {
-                // Personal data for each user
-                gamesCollection = collection(db, `artifacts/${appId}/users/${userId}/games`);
-                playersCollection = collection(db, `artifacts/${appId}/users/${userId}/players`);
-                // Public data for sessions
+                gamesCollection = collection(db, `artifacts/${appId}/public/data/games`);
+                playersCollection = collection(db, `artifacts/${appId}/public/data/players`);
                 sessionsCollection = collection(db, `artifacts/${appId}/public/data/sessions`);
                 setupEventListeners();
                 loadInitialData();
@@ -408,7 +406,7 @@
         
         function renderLobbyGameSelect() {
             lobbyGameSelect.innerHTML = '<option value="">-- Select a Game to Play --</option>';
-            const gamesToShow = state.currentSession ? state.currentSession.allGames : state.games;
+            const gamesToShow = state.games;
             gamesToShow.forEach(game => {
                 const option = document.createElement('option');
                 option.value = game.id;
@@ -498,8 +496,6 @@
 
         function updateUIBasedOnState(sessionData) {
             state.currentSession = sessionData;
-            state.games = sessionData.allGames || [];
-            state.players = sessionData.allPlayers || [];
             if (sessionData.currentGame) {
                 setupScreen.classList.add('hidden');
                 lobbyScreen.classList.add('hidden');
@@ -632,8 +628,6 @@
                 createdAt: Date.now(),
                 selectedGameId: null,
                 lobbySelectedPlayerIds: [],
-                allGames: state.games, 
-                allPlayers: state.players,
             });
             subscribeToSession(newCode);
         }
@@ -822,7 +816,7 @@
                 const newGameDoc = await addDoc(gamesCollection, gameData); 
                 gameNameInput.value = ''; gameScoreInput.value = ''; gameRulesInput.value = '';
                 if(state.currentSession) {
-                    await updateSession({allGames: arrayUnion({...gameData, id: newGameDoc.id})})
+                    await updateDoc(doc(sessionsCollection, state.currentSession.id), { allGames: arrayUnion({...gameData, id: newGameDoc.id}) });
                 }
             } 
             catch (error) { showNotification('Error: Could not save game.', true); }
@@ -842,7 +836,7 @@
                 const newPlayerDoc = await addDoc(playersCollection, { name: playerName, totalWins: 0, totalGamesPlayed: 0 }); 
                 if (!name) playerNameInput.value = ''; 
                 if(state.currentSession) {
-                    await updateSession({allPlayers: arrayUnion({id: newPlayerDoc.id, name: playerName, totalWins: 0, totalGamesPlayed: 0})})
+                    await updateDoc(doc(sessionsCollection, state.currentSession.id), { allPlayers: arrayUnion({id: newPlayerDoc.id, name: playerName, totalWins: 0, totalGamesPlayed: 0}) });
                 }
             } 
             catch (error) { showNotification('Error: Could not add player.', true); }
