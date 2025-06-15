@@ -84,11 +84,11 @@
                 <div class="bg-gray-800 p-4 rounded-lg mb-6">
                     <h3 class="text-2xl font-bold mb-3">Connected Devices</h3>
                     <div id="lobby-participant-list" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <!-- JS will populate this with connected user IDs -->
+                        <!-- JS will populate this -->
                     </div>
                 </div>
-                <div id="host-controls" class="hidden space-y-6">
-                     <h2 class="text-2xl font-semibold text-white">Host Controls</h2>
+                <div class="space-y-6">
+                     <h2 class="text-2xl font-semibold text-white">Game Setup</h2>
                      <div class="bg-gray-900 p-4 rounded-lg space-y-4">
                         <h3 class="text-xl font-semibold">1. Select a Game</h3>
                         <select id="lobby-game-select" class="w-full bg-gray-700 rounded-md p-2 text-white"></select>
@@ -106,9 +106,6 @@
                         </div>
                      </div>
                     <button id="lobby-start-game-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 text-lg rounded-md disabled:bg-gray-500 disabled:cursor-not-allowed">Start Game</button>
-                </div>
-                <div id="guest-view" class="hidden text-center text-gray-400 p-6 bg-gray-800 rounded-lg">
-                    <p class="text-xl">Waiting for the host to start the next game...</p>
                 </div>
                 <div class="mt-6 border-t border-gray-700 pt-6">
                     <h3 class="text-xl font-semibold mb-3 text-center">Session Options</h3>
@@ -138,7 +135,7 @@
                     </div>
                 </div>
                 <div id="scoreboard" class="space-y-3"></div>
-                <div id="game-host-controls" class="hidden mt-6 flex flex-col sm:flex-row gap-3">
+                <div id="game-controls" class="mt-6 flex flex-col sm:flex-row gap-3">
                     <button id="end-round-btn" class="w-full sm:w-1/2 bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-4 rounded-md transition duration-300">End Current Round</button>
                     <button id="end-game-early-btn" class="w-full sm:w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">End Game Early</button>
                 </div>
@@ -230,8 +227,7 @@
         const setupScreen = document.getElementById('setup-screen');
         const lobbyScreen = document.getElementById('lobby-screen');
         const gameScreen = document.getElementById('game-screen');
-        const hostControls = document.getElementById('host-controls');
-        const gameHostControls = document.getElementById('game-host-controls');
+        const gameControls = document.getElementById('game-controls');
         const guestView = document.getElementById('guest-view');
         const createGameNightBtn = document.getElementById('create-game-night-btn');
         const joinGameBtn = document.getElementById('join-game-btn');
@@ -285,7 +281,6 @@
             timerInterval: null, startTime: null,
             sessionStats: { totalWins: {}, gameWins: {} },
             currentSession: null, 
-            lobbySelectedPlayerIds: [],
         };
         
         let gamesCollection, playersCollection, sessionsCollection;
@@ -375,10 +370,15 @@
             endRoundBtn.addEventListener('click', endRound);
             endGameEarlyBtn.addEventListener('click', () => updateSession({ "currentGame.isFinished": true }));
             returnToLobbyBtn.addEventListener('click', () => {
-                if (state.currentSession.hostId === userId) {
-                    updateSession({ currentGame: null });
+                 updateSession({ currentGame: null });
+            });
+            lobbyGameSelect.addEventListener('change', (e) => updateSession({ selectedGameId: e.target.value }));
+            lobbyAvailablePlayersSelect.addEventListener('change', (e) => {
+                const playerId = e.target.value;
+                if(playerId) {
+                    updateSession({ lobbySelectedPlayerIds: arrayUnion(playerId) });
+                    e.target.value = ""; // Reset dropdown
                 }
-                endGameModal.classList.add('hidden');
             });
             // Touch and Mouse Drag Events
             lobbySelectedPlayers.addEventListener('dragstart', handleDragStart);
@@ -389,19 +389,7 @@
             lobbySelectedPlayers.addEventListener('touchmove', handleTouchMove, { passive: false });
             lobbySelectedPlayers.addEventListener('touchend', handleTouchEnd);
             gameConditionSelect.addEventListener('change', (e) => {
-                if(e.target.value === 'bestOf') {
-                    scoreInputLabel.textContent = "Number of Tickets";
-                } else {
-                    scoreInputLabel.textContent = "Winning Score";
-                }
-            });
-            lobbyAvailablePlayersSelect.addEventListener('change', (e) => {
-                const playerId = e.target.value;
-                if(playerId) {
-                    state.lobbySelectedPlayerIds.push(playerId);
-                    renderLobbyPlayerSelection();
-                    e.target.value = ""; // Reset dropdown
-                }
+                scoreInputLabel.textContent = e.target.value === 'bestOf' ? "Number of Tickets" : "Winning Score";
             });
         }
         
@@ -413,6 +401,9 @@
                 option.textContent = game.name;
                 lobbyGameSelect.appendChild(option);
             });
+            if (state.currentSession) {
+                lobbyGameSelect.value = state.currentSession.selectedGameId || "";
+            }
         }
 
         function renderGameList() {
@@ -442,9 +433,7 @@
         function renderLobby() {
             if (!state.currentSession) return;
             lobbyInviteCode.textContent = state.currentSession.id;
-            const isHost = state.currentSession.hostId === userId;
-            hostControls.classList.toggle('hidden', !isHost);
-            guestView.classList.toggle('hidden', isHost);
+            
             lobbyParticipantList.innerHTML = '';
             state.currentSession.participants.forEach(p => {
                 const div = document.createElement('div');
@@ -452,11 +441,13 @@
                 div.innerHTML = `<p class="font-semibold truncate">${p.userId.substring(0, 8)}...</p>${p.userId === state.currentSession.hostId ? '<p class="text-xs text-indigo-400 font-bold">HOST</p>' : ''}`;
                 lobbyParticipantList.appendChild(div);
             });
-            if (isHost) renderLobbyPlayerSelection();
+            renderLobbyPlayerSelection();
+            renderLobbyGameSelect();
         }
 
         function renderLobbyPlayerSelection() {
-            const available = state.players.filter(p => !state.lobbySelectedPlayerIds.includes(p.id));
+            const selectedIds = state.currentSession?.lobbySelectedPlayerIds || [];
+            const available = state.players.filter(p => !selectedIds.includes(p.id));
             lobbyAvailablePlayersSelect.innerHTML = '<option value="">-- Add a Player --</option>';
             available.forEach(p => {
                 const option = document.createElement('option');
@@ -466,11 +457,11 @@
             });
 
             lobbySelectedPlayers.innerHTML = '';
-            state.lobbySelectedPlayerIds.forEach(id => {
+            selectedIds.forEach(id => {
                 const player = state.players.find(p => p.id === id);
                 if (player) {
                     const div = createPlayerListItem(player, true);
-                    div.onclick = () => { state.lobbySelectedPlayerIds = state.lobbySelectedPlayerIds.filter(pid => pid !== id); renderLobbyPlayerSelection(); };
+                    div.onclick = () => { updateSession({ lobbySelectedPlayerIds: arrayRemove(id) }); };
                     lobbySelectedPlayers.appendChild(div);
                 }
             });
@@ -498,7 +489,6 @@
                 lobbyScreen.classList.add('hidden');
                 gameScreen.classList.remove('hidden');
                 renderGameState(sessionData.currentGame);
-                gameHostControls.classList.toggle('hidden', sessionData.hostId !== userId);
             } else {
                 setupScreen.classList.add('hidden');
                 gameScreen.classList.add('hidden');
@@ -509,13 +499,11 @@
         
         function renderGameState(gameState) {
             state.gameState = gameState;
-            const gameInfo = gameState; // Use game data directly from session
-            if (!gameInfo) { showNotification("Game data not found!"); leaveSession(); return; }
+            const gameInfo = gameState;
+            if (!gameInfo || !gameInfo.name) { showNotification("Game data is incomplete!"); leaveSession(); return; }
             state.currentGame = gameInfo; 
-            
             targetScoreLabel.textContent = gameInfo.condition === 'bestOf' ? "Total Tickets" : "Target Score";
             targetScoreDisplay.textContent = `${gameInfo.winningScore} ${gameInfo.condition === 'bestOf' ? 'Tickets' : 'pts'}`;
-
             gameTitleDisplay.textContent = gameInfo.name;
             roundCounter.textContent = gameState.round;
             gameCodeDisplay.textContent = state.currentSession.id;
@@ -531,32 +519,21 @@
 
         function renderScoreboard() {
             if (!state.gameState || !Array.isArray(state.gameState.players)) return;
+            gameControls.classList.toggle('hidden', state.currentGame.condition === 'bestOf');
             scoreboard.innerHTML = '';
-            gameHostControls.classList.toggle('hidden', state.currentGame.condition === 'bestOf');
             state.gameState.players.forEach(player => {
                 const playerInfo = state.players.find(p => p.id === player.id);
                 if (!playerInfo) return;
                 const div = document.createElement('div');
                 div.className = 'p-4 rounded-lg flex items-center justify-between bg-gray-800 shadow-md';
                 const mainScoreLabel = state.currentGame.condition === 'bestOf' ? 'Tickets' : 'Score';
-                
                 let controlsHTML = '';
                 if(state.currentGame.condition === 'bestOf') {
                     controlsHTML = `<button data-id="${player.id}" class="won-round-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Declare Winner</button>`;
                 } else {
-                    controlsHTML = `
-                        <input type="number" data-id="${player.id}" class="score-input w-20 text-center bg-gray-700 border border-gray-600 rounded-md p-2 text-white" placeholder="Round Pts">
-                        <button data-id="${player.id}" class="add-score-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-md text-lg">+</button>
-                        <button data-id="${player.id}" class="zero-score-btn bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-md">0</button>
-                    `;
+                    controlsHTML = `<input type="number" data-id="${player.id}" class="score-input w-20 text-center bg-gray-700 border border-gray-600 rounded-md p-2 text-white" placeholder="Round Pts"><button data-id="${player.id}" class="add-score-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-md text-lg">+</button><button data-id="${player.id}" class="zero-score-btn bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-md">0</button>`;
                 }
-
-                div.innerHTML = `
-                    <div>
-                        <p class="text-xl font-semibold">${playerInfo.name}</p>
-                        <p class="text-3xl font-bold">${player.score} <span class="text-base font-normal">${mainScoreLabel}</span></p>
-                    </div>
-                    <div class="flex items-center gap-2">${controlsHTML}</div>`;
+                div.innerHTML = `<div><p class="text-xl font-semibold">${playerInfo.name}</p><p class="text-3xl font-bold">${player.score} <span class="text-base font-normal">${mainScoreLabel}</span></p></div><div class="flex items-center gap-2">${controlsHTML}</div>`;
                 scoreboard.appendChild(div);
             });
             document.querySelectorAll('.add-score-btn').forEach(btn => btn.addEventListener('click', (e) => { const playerId = e.target.dataset.id; const input = document.querySelector(`.score-input[data-id="${playerId}"]`); if (input.value !== '') { addScore(playerId, parseInt(input.value, 10)); input.value = ''; } }));
@@ -566,11 +543,9 @@
 
         function renderSessionLeaderboard() {
             sessionLeaderboardContent.innerHTML = '';
-            
             const kingOfTheHillBanner = document.createElement('div');
             kingOfTheHillBanner.className = 'p-4 bg-gradient-to-br from-amber-400 to-yellow-500 text-black rounded-lg mb-6 text-center shadow-lg';
             const sessionTotalWins = Object.entries(state.sessionStats.totalWins);
-
             if (sessionTotalWins.length > 0) {
                 sessionTotalWins.sort(([, a], [, b]) => b - a);
                 const topWins = sessionTotalWins[0][1];
@@ -581,11 +556,9 @@
                 kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-wider">King of the Session</h4><p class="text-2xl font-bold">The Throne is Empty!</p><p class="text-sm">Play a game to crown a winner.</p>`;
             }
             sessionLeaderboardContent.appendChild(kingOfTheHillBanner);
-
             const gameKingsList = document.createElement('div');
             gameKingsList.className = 'space-y-4';
             const sessionGameWins = Object.entries(state.sessionStats.gameWins);
-
             if (sessionGameWins.length === 0) {
                  gameKingsList.innerHTML = `<p class="text-center text-gray-400">No specific game champions yet.</p>`;
             } else {
@@ -622,7 +595,9 @@
                 hostId: userId,
                 participants: [{userId}],
                 currentGame: null,
-                createdAt: Date.now()
+                createdAt: Date.now(),
+                selectedGameId: null,
+                lobbySelectedPlayerIds: [],
             });
             subscribeToSession(newCode);
         }
@@ -693,47 +668,46 @@
             const playerIndex = newPlayers.findIndex(p => p.id === winnerId);
             if (playerIndex > -1) {
                 newPlayers[playerIndex].score += 1;
-                // Mark this round as complete for all players, even though only one got a point
                 newPlayers.forEach(p => p.roundScores[state.gameState.round] = p.id === winnerId ? 1 : 0);
                 
-                updateSession({ 
+                const updates = {
                     [`currentGame.players`]: newPlayers,
                     [`currentGame.round`]: increment(1)
-                }).then(() => checkForWinner(newPlayers));
+                };
+                updateSession(updates).then(() => checkForWinner());
             }
         }
         
         async function endRound() {
-            if (state.currentSession.hostId !== userId || state.currentSession.currentGame.condition === 'bestOf') return;
-            
+            if (state.currentSession.currentGame.condition === 'bestOf') return;
             await updateSession({ [`currentGame.round`]: increment(1) });
-            checkForWinner(state.gameState.players);
+            checkForWinner();
         }
 
-        async function checkForWinner(currentPlayers) {
-            if (!state.currentSession.currentGame || !Array.isArray(currentPlayers)) return;
+        async function checkForWinner() {
+            if (!state.currentSession.currentGame || !Array.isArray(state.currentSession.currentGame.players)) return;
             let updates = {};
-            const { winningScore, condition, finalRoundMode } = state.currentSession.currentGame;
+            const { players, winningScore, condition, finalRoundMode, isFinalPhase: currentIsFinalPhase, potentialWinnerStreak: currentStreak, lastRoundLeaderId: currentLeader } = state.currentSession.currentGame;
+            let isFinalPhase = currentIsFinalPhase;
             
             let isFinished = false;
 
             if (condition === 'bestOf') {
-                const totalTickets = currentPlayers.reduce((sum, p) => sum + p.score, 0);
+                const totalTickets = players.reduce((sum, p) => sum + p.score, 0);
                 if (totalTickets >= winningScore) {
                     isFinished = true;
                 }
             } else {
-                let { isFinalPhase, potentialWinnerStreak, lastRoundLeaderId } = state.currentSession.currentGame;
-                if (currentPlayers.some(p => p.score >= winningScore)) {
-                    updates["currentGame.isFinalPhase"] = true;
+                if (players.some(p => p.score >= winningScore)) {
+                    if (!isFinalPhase) updates["currentGame.isFinalPhase"] = true;
                     isFinalPhase = true;
                 }
                 if (isFinalPhase && finalRoundMode) {
-                    const scores = currentPlayers.map(p => p.score);
+                    const scores = players.map(p => p.score);
                     const leaderScore = (condition === 'highest') ? Math.max(...scores) : Math.min(...scores);
-                    const leaders = currentPlayers.filter(p => p.score === leaderScore);
+                    const leaders = players.filter(p => p.score === leaderScore);
                     const uniqueLeaderId = leaders.length === 1 ? leaders[0].id : null;
-                    updates["currentGame.potentialWinnerStreak"] = (uniqueLeaderId && uniqueLeaderId === lastRoundLeaderId) ? potentialWinnerStreak + 1 : 1;
+                    updates["currentGame.potentialWinnerStreak"] = (uniqueLeaderId && uniqueLeaderId === currentLeader) ? currentStreak + 1 : 1;
                     updates["currentGame.lastRoundLeaderId"] = uniqueLeaderId;
                     if (updates["currentGame.potentialWinnerStreak"] >= 2 && uniqueLeaderId) isFinished = true;
                 } else if (isFinalPhase) {
@@ -765,8 +739,8 @@
             });
             
             const batch = writeBatch(db);
-            const gameRef = doc(gamesCollection, gameId);
-            winnerIds.forEach(id => batch.update(gameRef, {[`winCounts.${id}`]: increment(1)}));
+            const gameDataRef = doc(gamesCollection, gameId);
+            winnerIds.forEach(id => batch.update(gameDataRef, {[`winCounts.${id}`]: increment(1)}));
             for(const player of players) {
                 const playerRef = doc(playersCollection, player.id);
                 batch.update(playerRef, { totalGamesPlayed: increment(1), totalWins: winnerIds.includes(player.id) ? increment(1) : increment(0) });
