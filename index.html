@@ -7,8 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="https://placehold.co/192x192/000000/ffffff?text=BGS">
-    <!-- Meta tags for PWA behavior -->
-    <meta name="mobile-web-app-capable" content="yes">
+    <!-- Meta tags for iOS PWA behavior -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#1f2937">
@@ -646,7 +645,6 @@
             if (docSnap.exists()) {
                 await updateDoc(sessionRef, { participants: arrayUnion({userId, name: playerName}) });
                 
-                // Add the joining player's name to the session's player list if it's new.
                 const sessionData = docSnap.data();
                 const sessionPlayers = sessionData.allPlayers || [];
                 const isDuplicate = sessionPlayers.some(p => p.name.toLowerCase() === playerName.toLowerCase());
@@ -818,7 +816,13 @@
             const winningScore = parseInt(gameScoreInput.value, 10);
             if (!name || isNaN(winningScore) || winningScore <= 0) { showNotification('Please provide a valid name and score.', true); return; }
             const gameData = { name, winningScore, condition: gameConditionSelect.value, finalRoundMode: finalRoundModeCheckbox.checked, winCounts: {} };
-            try { await addDoc(gamesCollection, gameData); gameNameInput.value = ''; gameScoreInput.value = ''; gameRulesInput.value = ''; } 
+            try { 
+                const newGameDoc = await addDoc(gamesCollection, gameData); 
+                gameNameInput.value = ''; gameScoreInput.value = ''; gameRulesInput.value = '';
+                if(state.currentSession) {
+                    await updateSession({allGames: arrayUnion({...gameData, id: newGameDoc.id})})
+                }
+            } 
             catch (error) { showNotification('Error: Could not save game.', true); }
         }
         
@@ -832,8 +836,12 @@
                  return;
             }
 
-            try { await addDoc(playersCollection, { name: playerName, totalWins: 0, totalGamesPlayed: 0 }); 
+            try { 
+                const newPlayerDoc = await addDoc(playersCollection, { name: playerName, totalWins: 0, totalGamesPlayed: 0 }); 
                 if (!name) playerNameInput.value = ''; 
+                if(state.currentSession) {
+                    await updateSession({allPlayers: arrayUnion({id: newPlayerDoc.id, name: playerName, totalWins: 0, totalGamesPlayed: 0})})
+                }
             } 
             catch (error) { showNotification('Error: Could not add player.', true); }
         }
