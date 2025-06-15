@@ -132,7 +132,7 @@
                         </div>
                     </div>
                     <div class="flex justify-around items-center text-center border-t border-gray-700 pt-3">
-                        <div><p class="text-sm uppercase text-gray-400">Target Score</p><p id="target-score-display" class="text-2xl font-bold text-amber-400"></p></div>
+                        <div><p id="target-score-label" class="text-sm uppercase text-gray-400">Target Score</p><p id="target-score-display" class="text-2xl font-bold text-amber-400"></p></div>
                         <div><p class="text-sm uppercase text-gray-400">Current Round</p><p id="round-counter" class="text-2xl font-bold">1</p></div>
                         <div><p class="text-sm uppercase text-gray-400">Time Elapsed</p><p id="timer" class="text-2xl font-bold font-mono">00:00:00</p></div>
                     </div>
@@ -161,8 +161,15 @@
                 <div class="space-y-4 border-t border-gray-700 pt-4 mt-4">
                     <h4 class="text-lg font-semibold">Or Add Manually:</h4>
                     <input type="text" id="game-name-input" placeholder="Game Name" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white">
-                    <input type="number" id="game-score-input" placeholder="Winning Score" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white">
-                    <select id="game-condition-select" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white"><option value="highest">Highest Score Wins</option><option value="lowest">Lowest Score Wins</option></select>
+                    <div>
+                        <label id="score-input-label" for="game-score-input" class="block text-sm font-medium text-gray-300 mb-1">Winning Score</label>
+                        <input type="number" id="game-score-input" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white">
+                    </div>
+                    <select id="game-condition-select" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white">
+                        <option value="highest">Highest Score Wins</option>
+                        <option value="lowest">Lowest Score Wins</option>
+                        <option value="bestOf">Best of (Tickets)</option>
+                    </select>
                     <div class="flex items-center"><input type="checkbox" id="final-round-mode-checkbox" class="h-4 w-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"><label for="final-round-mode-checkbox" class="ml-2 text-white">Final Round Mode</label></div>
                 </div>
                 <div class="mt-6 flex justify-between"><button id="save-game-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Add Game</button><button id="close-games-modal-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Close</button></div>
@@ -249,6 +256,7 @@
         const saveGameBtn = document.getElementById('save-game-btn');
         const gameNameInput = document.getElementById('game-name-input');
         const gameScoreInput = document.getElementById('game-score-input');
+        const scoreInputLabel = document.getElementById('score-input-label');
         const gameConditionSelect = document.getElementById('game-condition-select');
         const finalRoundModeCheckbox = document.getElementById('final-round-mode-checkbox');
         const gameRulesInput = document.getElementById('game-rules-input');
@@ -263,6 +271,7 @@
         const roundCounter = document.getElementById('round-counter');
         const timerDisplay = document.getElementById('timer');
         const targetScoreDisplay = document.getElementById('target-score-display');
+        const targetScoreLabel = document.getElementById('target-score-label');
         const gameTitleDisplay = document.getElementById('game-title-display');
         const gameCodeDisplay = document.getElementById('game-code-display');
         const finalScores = document.getElementById('final-scores');
@@ -379,6 +388,13 @@
             lobbySelectedPlayers.addEventListener('touchstart', handleTouchStart, { passive: false });
             lobbySelectedPlayers.addEventListener('touchmove', handleTouchMove, { passive: false });
             lobbySelectedPlayers.addEventListener('touchend', handleTouchEnd);
+            gameConditionSelect.addEventListener('change', (e) => {
+                if(e.target.value === 'bestOf') {
+                    scoreInputLabel.textContent = "Number of Tickets";
+                } else {
+                    scoreInputLabel.textContent = "Winning Score";
+                }
+            });
         }
         
         function renderLobbyGameSelect() {
@@ -486,8 +502,11 @@
             const gameInfo = state.games.find(g => g.id === gameState.gameId);
             if (!gameInfo) { showNotification("Game data not found!"); leaveSession(); return; }
             state.currentGame = gameInfo;
+            
+            targetScoreLabel.textContent = gameInfo.condition === 'bestOf' ? "Total Tickets" : "Target Score";
+            targetScoreDisplay.textContent = `${gameInfo.winningScore} ${gameInfo.condition === 'bestOf' ? 'Tickets' : 'pts'}`;
+
             gameTitleDisplay.textContent = gameInfo.name;
-            targetScoreDisplay.textContent = `${gameInfo.winningScore} pts`;
             roundCounter.textContent = gameState.round;
             gameCodeDisplay.textContent = state.currentSession.id;
             if (!state.timerInterval && gameState.startTime) {
@@ -498,6 +517,77 @@
             if (gameState.isFinished) {
                 triggerEndGame("Game Over");
             }
+        }
+
+        function renderScoreboard() {
+            if (!state.gameState) return;
+            scoreboard.innerHTML = '';
+            state.gameState.players.forEach(player => {
+                const playerInfo = state.players.find(p => p.id === player.id);
+                if (!playerInfo) return;
+                const div = document.createElement('div');
+                div.className = 'p-4 rounded-lg flex items-center justify-between bg-gray-800 shadow-md';
+                const mainScoreLabel = state.currentGame.condition === 'bestOf' ? 'Tickets' : 'Score';
+                div.innerHTML = `
+                    <div>
+                        <p class="text-xl font-semibold">${playerInfo.name}</p>
+                        <p class="text-3xl font-bold">${player.score} <span class="text-base font-normal">${mainScoreLabel}</span></p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" data-id="${player.id}" class="score-input w-20 text-center bg-gray-700 border border-gray-600 rounded-md p-2 text-white" placeholder="Round Pts">
+                        <button data-id="${player.id}" class="add-score-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-md text-lg">+</button>
+                        <button data-id="${player.id}" class="zero-score-btn bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-md">0</button>
+                    </div>`;
+                scoreboard.appendChild(div);
+            });
+            document.querySelectorAll('.add-score-btn').forEach(btn => btn.addEventListener('click', (e) => { const playerId = e.target.dataset.id; const input = document.querySelector(`.score-input[data-id="${playerId}"]`); if (input.value !== '') { addScore(playerId, parseInt(input.value, 10)); input.value = ''; } }));
+            document.querySelectorAll('.zero-score-btn').forEach(btn => btn.addEventListener('click', (e) => addScore(e.target.dataset.id, 0)));
+        }
+
+        function renderSessionLeaderboard() {
+            sessionLeaderboardContent.innerHTML = '';
+            
+            const kingOfTheHillBanner = document.createElement('div');
+            kingOfTheHillBanner.className = 'p-4 bg-gradient-to-br from-amber-400 to-yellow-500 text-black rounded-lg mb-6 text-center shadow-lg';
+            const sessionTotalWins = Object.entries(state.sessionStats.totalWins);
+
+            if (sessionTotalWins.length > 0) {
+                sessionTotalWins.sort(([, a], [, b]) => b - a);
+                const topWins = sessionTotalWins[0][1];
+                const kings = sessionTotalWins.filter(([, wins]) => wins === topWins);
+                const kingNames = kings.map(([playerId,]) => state.players.find(p => p.id === playerId)?.name || 'Unknown').join(' & ');
+                kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-widest">King of the Session</h4><p class="text-4xl font-extrabold text-white text-shadow-md">${kingNames} 👑</p><p class="text-lg font-semibold">${topWins} Total Wins</p>`;
+            } else {
+                kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-wider">King of the Session</h4><p class="text-2xl font-bold">The Throne is Empty!</p><p class="text-sm">Play a game to crown a winner.</p>`;
+            }
+            sessionLeaderboardContent.appendChild(kingOfTheHillBanner);
+
+            const gameKingsList = document.createElement('div');
+            gameKingsList.className = 'space-y-4';
+            const sessionGameWins = Object.entries(state.sessionStats.gameWins);
+
+            if (sessionGameWins.length === 0) {
+                 gameKingsList.innerHTML = `<p class="text-center text-gray-400">No specific game champions yet.</p>`;
+            } else {
+                const subheader = document.createElement('h5');
+                subheader.className = 'text-lg font-bold text-center text-gray-300 border-b border-gray-600 pb-2 mb-4';
+                subheader.textContent = 'Game Championships';
+                gameKingsList.appendChild(subheader);
+                sessionGameWins.forEach(([gameId, playerWins]) => {
+                    const game = state.games.find(g => g.id === gameId);
+                    const winCounts = Object.entries(playerWins).sort(([, a], [, b]) => b - a);
+                    if (winCounts.length > 0) {
+                        const topWins = winCounts[0][1];
+                        const gameKings = winCounts.filter(([, wins]) => wins === topWins);
+                        const kingNames = gameKings.map(([playerId,]) => state.players.find(p => p.id === playerId)?.name || 'Unknown').join(' & ');
+                        const gameKingItem = document.createElement('div');
+                        gameKingItem.className = 'p-3 bg-gradient-to-br from-gray-500 to-gray-600 text-white rounded-lg shadow-md flex justify-between items-center';
+                        gameKingItem.innerHTML = `<div><p class="text-sm uppercase font-semibold text-gray-300">Champion of ${game.name}</p><p class="font-bold text-xl">${kingNames}</p></div><p class="font-bold text-2xl">${topWins} Wins</p>`;
+                        gameKingsList.appendChild(gameKingItem);
+                    }
+                });
+            }
+            sessionLeaderboardContent.appendChild(gameKingsList);
         }
         
         async function createGameNight() {
@@ -564,68 +654,100 @@
             if (!state.gameState) return;
             const playerIndex = state.gameState.players.findIndex(p => p.id === playerId);
             if (playerIndex > -1 && !isNaN(score)) {
-                let newPlayers = JSON.parse(JSON.stringify(state.gameState.players));
-                let player = newPlayers[playerIndex];
-                player.score += score;
-                player.roundScores[state.gameState.round] = score;
-                newPlayers[playerIndex] = player;
-                updateSession({ [`currentGame.players`]: newPlayers }).then(() => {
-                    const allScoresIn = newPlayers.every(p => p.roundScores[state.gameState.round] !== undefined);
-                    if (allScoresIn) endRound();
-                });
+                const updates = {};
+                updates[`currentGame.players.${playerIndex}.roundScores.${state.gameState.round}`] = score;
+
+                if (state.currentGame.condition !== 'bestOf') {
+                    updates[`currentGame.players.${playerIndex}.score`] = increment(score);
+                }
+                updateSession(updates);
             }
         }
         
         async function endRound() {
             if (state.currentSession.hostId !== userId) return;
-            await updateSession({ [`currentGame.round`]: increment(1) });
-            checkForWinner();
-        }
+            let currentPlayers = JSON.parse(JSON.stringify(state.gameState.players));
+            const currentRound = state.gameState.round;
 
-        async function checkForWinner() {
-            if (!state.currentSession.currentGame) return;
-            let updates = {};
-            const { winningScore, condition, finalRoundMode } = state.games.find(g => g.id === state.currentSession.currentGame.gameId);
-            let { players, isFinalPhase, potentialWinnerStreak, lastRoundLeaderId } = state.currentSession.currentGame;
-            
-            if (players.some(p => p.score >= winningScore)) {
-                if (!isFinalPhase) updates[`currentGame.isFinalPhase`] = true;
-                isFinalPhase = true;
-            }
-            
-            if (isFinalPhase) {
-                if (finalRoundMode) {
-                    const scores = players.map(p => p.score);
-                    const leaderScore = (condition === 'highest') ? Math.max(...scores) : Math.min(...scores);
-                    const leaders = players.filter(p => p.score === leaderScore);
-                    const uniqueLeaderId = leaders.length === 1 ? leaders[0].id : null;
-                    updates[`currentGame.potentialWinnerStreak`] = (uniqueLeaderId && uniqueLeaderId === lastRoundLeaderId) ? potentialWinnerStreak + 1 : 1;
-                    updates[`currentGame.lastRoundLeaderId`] = uniqueLeaderId;
-                    if (updates[`currentGame.potentialWinnerStreak`] >= 2 && uniqueLeaderId) updates[`currentGame.isFinished`] = true;
-                } else {
-                    updates[`currentGame.isFinished`] = true;
+            if (state.currentGame.condition === 'bestOf') {
+                const roundScores = currentPlayers.map(p => p.roundScores[currentRound] || -Infinity);
+                const maxRoundScore = Math.max(...roundScores);
+                
+                if (maxRoundScore > -Infinity) {
+                    currentPlayers.forEach(p => {
+                        if ((p.roundScores[currentRound] || -Infinity) === maxRoundScore) {
+                            p.score += 1;
+                        }
+                    });
                 }
             }
-            if (Object.keys(updates).length > 0) await updateSession(updates);
+            
+            await updateSession({
+                "currentGame.players": currentPlayers,
+                "currentGame.round": increment(1)
+            });
+
+            checkForWinner(currentPlayers);
+        }
+
+        async function checkForWinner(currentPlayers) {
+            if (!state.currentGame) return;
+            let updates = {};
+            const { winningScore, condition, finalRoundMode } = state.currentGame;
+            
+            let isFinished = false;
+
+            if (condition === 'bestOf') {
+                const totalTickets = currentPlayers.reduce((sum, p) => sum + p.score, 0);
+                if (totalTickets >= winningScore) {
+                    isFinished = true;
+                }
+            } else {
+                const { isFinalPhase, potentialWinnerStreak, lastRoundLeaderId } = state.gameState;
+                if (currentPlayers.some(p => p.score >= winningScore)) {
+                    updates["currentGame.isFinalPhase"] = true;
+                    if (finalRoundMode) {
+                        const scores = currentPlayers.map(p => p.score);
+                        const leaderScore = (condition === 'highest') ? Math.max(...scores) : Math.min(...scores);
+                        const leaders = currentPlayers.filter(p => p.score === leaderScore);
+                        const uniqueLeaderId = leaders.length === 1 ? leaders[0].id : null;
+                        
+                        updates["currentGame.potentialWinnerStreak"] = (uniqueLeaderId && uniqueLeaderId === lastRoundLeaderId) ? potentialWinnerStreak + 1 : 1;
+                        updates["currentGame.lastRoundLeaderId"] = uniqueLeaderId;
+
+                        if (updates["currentGame.potentialWinnerStreak"] >= 2 && uniqueLeaderId) isFinished = true;
+                    } else {
+                        isFinished = true;
+                    }
+                }
+            }
+            
+            if (isFinished) {
+                updates["currentGame.isFinished"] = true;
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await updateSession(updates);
+            }
         }
 
         async function triggerEndGame(title) {
             stopTimer();
-            const { condition } = state.games.find(g => g.id === state.currentSession.currentGame.gameId);
-            const players = [...state.currentSession.currentGame.players];
+            const { condition } = state.currentGame;
+            const players = [...state.gameState.players];
             players.sort((a,b) => condition === 'highest' ? b.score - a.score : a.score - b.score);
             const winnerScore = players[0].score;
             const winnerIds = players.filter(p => p.score === winnerScore).map(p => p.id);
             
             winnerIds.forEach(id => {
                 state.sessionStats.totalWins[id] = (state.sessionStats.totalWins[id] || 0) + 1;
-                const gameId = state.currentSession.currentGame.gameId;
+                const gameId = state.currentGame.gameId;
                 if (!state.sessionStats.gameWins[gameId]) state.sessionStats.gameWins[gameId] = {};
                 state.sessionStats.gameWins[gameId][id] = (state.sessionStats.gameWins[gameId][id] || 0) + 1;
             });
             
             const batch = writeBatch(db);
-            const gameRef = doc(gamesCollection, state.currentSession.currentGame.gameId);
+            const gameRef = doc(gamesCollection, state.currentGame.gameId);
             winnerIds.forEach(id => batch.update(gameRef, {[`winCounts.${id}`]: increment(1)}));
             for(const player of players) {
                 const playerRef = doc(playersCollection, player.id);
@@ -782,42 +904,15 @@
         }
 
         let draggedItem = null;
+        let touchStartY = 0;
         function handleDragStart(e) { draggedItem = e.target; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', e.target.dataset.id); setTimeout(() => e.target.classList.add('dragging'), 0); }
         function handleDragEnd(e) { e.target.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
         function handleDragOver(e) { e.preventDefault(); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over'); }
         function getDragAfterElement(container, y) { const draggableElements = [...container.querySelectorAll('.player-list-item:not(.dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
-        function handleDrop(e) { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); const fromIndex = state.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length; const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.lobbySelectedPlayerIds.splice(toIndex, 0, item); renderLobbyPlayerSelection(); }
-        
-        let touchStartY = 0;
-        function handleTouchStart(e) {
-            const target = e.target.closest('.player-list-item');
-            if (!target) return;
-            draggedItem = target;
-            touchStartY = e.touches[0].clientY;
-            draggedItem.classList.add('dragging');
-        }
-        function handleTouchMove(e) {
-            if (!draggedItem) return;
-            e.preventDefault();
-            const y = e.touches[0].clientY;
-            draggedItem.style.transform = `translateY(${y - touchStartY}px)`;
-            const afterElement = getDragAfterElement(lobbySelectedPlayers, y);
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            if (afterElement) afterElement.classList.add('drag-over');
-        }
-        function handleTouchEnd(e) {
-            if (!draggedItem) return;
-            draggedItem.classList.remove('dragging');
-            draggedItem.style.transform = '';
-            const id = draggedItem.dataset.id;
-            const fromIndex = state.lobbySelectedPlayerIds.indexOf(id);
-            const afterElement = getDragAfterElement(lobbySelectedPlayers, e.changedTouches[0].clientY);
-            const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length;
-            const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0];
-            state.lobbySelectedPlayerIds.splice(toIndex, 0, item);
-            renderLobbyPlayerSelection();
-            draggedItem = null;
-        }
+        function handleDrop(e) { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); const fromIndex = state.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.changedTouches ? e.changedTouches[0].clientY : e.clientY); const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length; const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.lobbySelectedPlayerIds.splice(toIndex, 0, item); renderLobbyPlayerSelection(); }
+        function handleTouchStart(e) { const target = e.target.closest('.player-list-item'); if (!target) return; draggedItem = target; touchStartY = e.touches[0].clientY; draggedItem.classList.add('dragging'); e.preventDefault();}
+        function handleTouchMove(e) { if (!draggedItem) return; e.preventDefault(); const y = e.touches[0].clientY; draggedItem.style.transform = `translateY(${y - touchStartY}px)`; const afterElement = getDragAfterElement(lobbySelectedPlayers, y); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over');}
+        function handleTouchEnd(e) { if (!draggedItem) return; draggedItem.classList.remove('dragging'); draggedItem.style.transform = ''; handleDrop(e); draggedItem = null;}
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
