@@ -509,12 +509,12 @@
         
         function renderGameState(gameState) {
             state.gameState = gameState;
-            const gameInfo = state.games.find(g => g.id === gameState.gameId);
+            const gameInfo = gameState; // Use game data directly from session
             if (!gameInfo) { showNotification("Game data not found!"); leaveSession(); return; }
-            state.currentGame = gameState; 
+            state.currentGame = gameInfo; 
             
-            targetScoreLabel.textContent = gameState.condition === 'bestOf' ? "Total Tickets" : "Target Score";
-            targetScoreDisplay.textContent = `${gameState.winningScore} ${gameState.condition === 'bestOf' ? 'Tickets' : 'pts'}`;
+            targetScoreLabel.textContent = gameInfo.condition === 'bestOf' ? "Total Tickets" : "Target Score";
+            targetScoreDisplay.textContent = `${gameInfo.winningScore} ${gameInfo.condition === 'bestOf' ? 'Tickets' : 'pts'}`;
 
             gameTitleDisplay.textContent = gameInfo.name;
             roundCounter.textContent = gameState.round;
@@ -870,6 +870,7 @@
             localStorage.setItem('lastPlayedGameId', selectedGameId);
             const initialGameState = {
                 gameId: gameToPlay.id,
+                name: gameToPlay.name,
                 winningScore: gameToPlay.winningScore,
                 condition: gameToPlay.condition,
                 finalRoundMode: gameToPlay.finalRoundMode,
