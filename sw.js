@@ -1,14 +1,13 @@
 // A unique name for the cache. Using a version number helps in updating the cache when the app is updated.
-const CACHE_NAME = 'board-game-scorer-v22';
+const CACHE_NAME = 'board-game-scorer-v24';
 
 // A list of the essential files the app needs to work offline.
+// We are REMOVING the external Tailwind CSS URL from this list.
 const urlsToCache = [
   '/', // The root of the site
   'index.html',
-  'manifest.json'
+  'manifest.json',
 ];
-
-const tailwindUrl = 'https://cdn.tailwindcss.com';
 
 // 'install' event: This is fired when the service worker is first installed.
 self.addEventListener('install', event => {
@@ -16,24 +15,19 @@ self.addEventListener('install', event => {
   // until the caching is complete.
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(async (cache) => {
+      .then(cache => {
         console.log('Opened cache');
-        // Add the main app files to the cache.
-        await cache.addAll(urlsToCache);
-        
-        // FIX: Fetch and cache the Tailwind CSS file with 'no-cors' mode.
-        // This allows us to cache the file from the CDN without a CORS error.
-        const tailwindRequest = new Request(tailwindUrl, { mode: 'no-cors' });
-        const tailwindResponse = await fetch(tailwindRequest);
-        return cache.put(tailwindRequest, tailwindResponse);
+        // Add all the specified assets to the cache.
+        return cache.addAll(urlsToCache);
       })
   );
 });
 
-// 'fetch' event: This is fired for every request the PWA makes (e.g., for pages, scripts, images).
+// 'fetch' event: This is fired for every request the PWA makes.
 self.addEventListener('fetch', event => {
   // respondWith() hijacks the request and allows us to provide our own response.
   event.respondWith(
+    // Check if the request is already in the cache.
     caches.match(event.request)
       .then(response => {
         // If a cached response is found, return it.
