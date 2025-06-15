@@ -1,18 +1,18 @@
-// Define a unique name for the cache
-const CACHE_NAME = 'board-game-scorer-v20';
+// A unique name for the cache. Using a version number helps in updating the cache when the app is updated.
+const CACHE_NAME = 'board-game-scorer-v22';
 
-// List of files to cache when the service worker is installed
+// A list of the essential files the app needs to work offline.
 const urlsToCache = [
-  '/',
+  '/', // The root of the site
   'index.html',
   'manifest.json',
-  'https://cdn.tailwindcss.com',
+  'https://cdn.tailwindcss.com' // Caching the CSS framework
 ];
 
-// Install event: fires when the service worker is first installed.
+// 'install' event: This is fired when the service worker is first installed.
 self.addEventListener('install', event => {
-  // waitUntil() ensures that the service worker will not install until the
-  // code inside it has successfully completed.
+  // We use event.waitUntil to ensure that the service worker doesn't finish installing
+  // until the caching is complete.
   event.waitUntil(
     // Open the cache by name.
     caches.open(CACHE_NAME)
@@ -24,7 +24,7 @@ self.addEventListener('install', event => {
   );
 });
 
-// Fetch event: fires for every request the PWA makes.
+// 'fetch' event: This is fired for every request the PWA makes (e.g., for pages, scripts, images).
 self.addEventListener('fetch', event => {
   // respondWith() hijacks the request and allows us to provide our own response.
   event.respondWith(
@@ -35,22 +35,21 @@ self.addEventListener('fetch', event => {
         if (response) {
           return response;
         }
-        // Otherwise, fetch the resource from the network.
+        // If the request is not in the cache, we let the browser fetch it from the network as usual.
         return fetch(event.request);
-      }
-    )
+      })
   );
 });
 
-// Activate event: fires when the service worker is activated.
-// This is a good place to manage old caches.
+// 'activate' event: This is fired when the service worker is activated.
+// It's a good place to clean up old, unused caches.
 self.addEventListener('activate', event => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
-          // If a cache is not in our whitelist, delete it.
+          // If a cache's name is not in our whitelist, we delete it.
           if (cacheWhitelist.indexOf(cacheName) === -1) {
             return caches.delete(cacheName);
           }

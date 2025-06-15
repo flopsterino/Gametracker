@@ -333,8 +333,8 @@
                 return;
             }
             try {
-                gamesCollection = collection(db, `artifacts/${appId}/users/${userId}/games`);
-                playersCollection = collection(db, `artifacts/${appId}/users/${userId}/players`);
+                gamesCollection = collection(db, `artifacts/${appId}/public/data/games`);
+                playersCollection = collection(db, `artifacts/${appId}/public/data/players`);
                 sessionsCollection = collection(db, `artifacts/${appId}/public/data/sessions`);
                 setupEventListeners();
                 loadInitialData();
@@ -495,9 +495,8 @@
 
         function updateUIBasedOnState(sessionData) {
             state.currentSession = sessionData;
-            state.games = sessionData.allGames || []; // Use session games for all clients
-            state.players = sessionData.allPlayers || []; // Use session players for all clients
-
+            state.games = sessionData.allGames || [];
+            state.players = sessionData.allPlayers || [];
             if (sessionData.currentGame) {
                 setupScreen.classList.add('hidden');
                 lobbyScreen.classList.add('hidden');
@@ -644,6 +643,16 @@
 
             if (docSnap.exists()) {
                 await updateDoc(sessionRef, { participants: arrayUnion({userId, name: playerName}) });
+                
+                // Add the joining player's name to the session's player list if it's new.
+                const sessionData = docSnap.data();
+                const sessionPlayers = sessionData.allPlayers || [];
+                const isDuplicate = sessionPlayers.some(p => p.name.toLowerCase() === playerName.toLowerCase());
+                if(!isDuplicate) {
+                    const newPlayer = {id: `guest-${Date.now()}`, name: playerName, totalWins: 0, totalGamesPlayed: 0};
+                    await updateDoc(sessionRef, { allPlayers: arrayUnion(newPlayer) });
+                }
+                
                 subscribeToSession(code);
             } else {
                 showNotification("Game session not found.", true);
@@ -853,4 +862,117 @@
                 }
             };
             const apiKey = "AIzaSyD2PehrrJxKs2EWNsgkSR3k4GUKNg_QFf4";
-            const apiUrl 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const result = await response.json();
+                if (result.candidates && result.candidates[0].content.parts[0].text) {
+                    const data = JSON.parse(result.candidates[0].content.parts[0].text);
+                    gameNameInput.value = data.gameName || '';
+                    if (data.winningScore) {
+                        gameScoreInput.value = Math.round(data.winningScore);
+                    } else {
+                        gameScoreInput.value = '';
+                    }
+                    if (data.winningCondition === 'highest' || data.winningCondition === 'lowest') {
+                        gameConditionSelect.value = data.winningCondition;
+                    }
+                    finalRoundModeCheckbox.checked = data.finalRoundMode || false;
+                    showNotification("Rules analyzed successfully!");
+                } else {
+                    throw new Error("Invalid response from AI.");
+                }
+            } catch (error) {
+                console.error("Error analyzing rules:", error);
+                showNotification("Could not analyze rules. Please try again or enter manually.", true);
+            } finally {
+                analyzeLoader.classList.add('hidden');
+                analyzeRulesBtn.disabled = false;
+            }
+        }
+
+        function startGame() {
+            const selectedGameId = state.currentSession.selectedGameId;
+            const selectedPlayerIds = state.currentSession.lobbySelectedPlayerIds;
+            if (!selectedGameId || selectedPlayerIds.length < 1) { showNotification("Please select a game and at least one player.", true); return; }
+            const gameToPlay = state.games.find(g => g.id === selectedGameId);
+            localStorage.setItem('lastPlayedGameId', selectedGameId);
+            const initialGameState = {
+                gameId: gameToPlay.id,
+                name: gameToPlay.name,
+                winningScore: gameToPlay.winningScore,
+                condition: gameToPlay.condition,
+                finalRoundMode: gameToPlay.finalRoundMode,
+                round: 1, 
+                startTime: Date.now(),
+                players: selectedPlayerIds.map(id => ({ id, score: 0, roundScores: {} })),
+                isFinalPhase: false, isFinished: false,
+                potentialWinnerStreak: 0, lastRoundLeaderId: null,
+            };
+            updateSession({ currentGame: initialGameState });
+        }
+        
+        function renderFinalScores(players, condition) {
+            finalScores.innerHTML = '';
+            const winnerScore = players[0].score;
+            players.forEach(player => {
+                const playerInfo = state.players.find(p => p.id === player.id);
+                if (!playerInfo) return;
+                const p = document.createElement('p');
+                p.className = 'text-lg p-2 rounded-md';
+                let highlightClass = '';
+                if ((condition === 'highest' || condition === 'bestOf') && player.score === winnerScore) highlightClass = 'bg-green-500 text-white font-bold';
+                else if (condition === 'lowest') {
+                    if (player.score === winnerScore) highlightClass = 'bg-green-500 text-white font-bold';
+                    const maxScore = Math.max(...players.map(p => p.score));
+                    if (player.score === maxScore && maxScore !== winnerScore) highlightClass = 'bg-red-500 text-white font-bold';
+                }
+                p.className += ` ${highlightClass}`;
+                p.textContent = `${playerInfo.name}: ${player.score} points`;
+                finalScores.appendChild(p);
+            });
+        }
+
+        function startTimer() { if (state.timerInterval) clearInterval(state.timerInterval); state.timerInterval = setInterval(() => { const elapsed = Date.now() - state.startTime; const seconds = Math.floor((elapsed / 1000) % 60).toString().padStart(2, '0'); const minutes = Math.floor((elapsed / (1000 * 60)) % 60).toString().padStart(2, '0'); const hours = Math.floor((elapsed / (1000 * 60 * 60)) % 24).toString().padStart(2, '0'); timerDisplay.textContent = `${hours}:${minutes}:${seconds}`; }, 1000); }
+        function stopTimer() { clearInterval(state.timerInterval); state.timerInterval = null; }
+
+        function resetApp() {
+            stopTimer();
+            if (unsubscribeSession) { unsubscribeSession(); unsubscribeSession = null; }
+            state.currentGame = null; state.gameState = null; state.currentSession = null;
+            setupScreen.classList.remove('hidden');
+            lobbyScreen.classList.add('hidden');
+            gameScreen.classList.add('hidden');
+        }
+
+        function showNotification(message, isError = false, duration = 3000) {
+            notification.textContent = message;
+            notification.classList.toggle('bg-red-600', isError);
+            notification.classList.toggle('bg-green-600', !isError);
+            notification.classList.remove('opacity-0');
+            setTimeout(() => {
+                notification.classList.add('opacity-0');
+            }, duration);
+        }
+
+        let draggedItem = null;
+        let touchStartY = 0;
+        function handleDragStart(e) { draggedItem = e.target; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', e.target.dataset.id); setTimeout(() => e.target.classList.add('dragging'), 0); }
+        function handleDragEnd(e) { if(draggedItem) draggedItem.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
+        function handleDragOver(e) { e.preventDefault(); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over'); }
+        function getDragAfterElement(container, y) { const draggableElements = [...container.querySelectorAll('.player-list-item:not(.dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
+        function handleDrop(e) { e.preventDefault(); if(!draggedItem) return; const id = draggedItem.dataset.id; const fromIndex = state.currentSession.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.changedTouches ? e.changedTouches[0].clientY : e.clientY); const toIndex = afterElement ? state.currentSession.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.currentSession.lobbySelectedPlayerIds.length; const item = state.currentSession.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.currentSession.lobbySelectedPlayerIds.splice(toIndex, 0, item); updateSession({ lobbySelectedPlayerIds: state.currentSession.lobbySelectedPlayerIds }); }
+        function handleTouchStart(e) { const target = e.target.closest('.player-list-item'); if (!target) return; draggedItem = target; touchStartY = e.touches[0].clientY; draggedItem.classList.add('dragging'); e.preventDefault();}
+        function handleTouchMove(e) { if (!draggedItem) return; e.preventDefault(); const y = e.touches[0].clientY; draggedItem.style.transform = `translateY(${y - touchStartY}px)`; const afterElement = getDragAfterElement(lobbySelectedPlayers, y); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over');}
+        function handleTouchEnd(e) { if (!draggedItem) return; draggedItem.classList.remove('dragging'); draggedItem.style.transform = ''; handleDrop(e); draggedItem = null;}
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service worker registered.', reg))
+                    .catch(err => console.log('Service worker registration failed: ', err));
+            });
+        }
+    </script>
+</body>
+</html>
