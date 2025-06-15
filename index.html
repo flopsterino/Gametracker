@@ -648,18 +648,7 @@
             if (unsubscribeSession) unsubscribeSession();
             unsubscribeSession = onSnapshot(doc(sessionsCollection, sessionId), (doc) => {
                 if(doc.exists()) {
-                    const sessionData = { id: doc.id, ...doc.data() };
-                    updateUIBasedOnState(sessionData);
-
-                    // Auto-add players for the host
-                    if (sessionData.hostId === userId) {
-                        const existingPlayerNames = state.players.map(p => p.name.toLowerCase());
-                        sessionData.participants.forEach(p => {
-                            if (p.name && !existingPlayerNames.includes(p.name.toLowerCase())) {
-                                addPlayer(p.name);
-                            }
-                        });
-                    }
+                    updateUIBasedOnState({ id: doc.id, ...doc.data() });
                 } else {
                     showNotification("Game session has ended.", false);
                     resetApp();
