@@ -333,8 +333,10 @@
                 return;
             }
             try {
+                // Personal data for each user
                 gamesCollection = collection(db, `artifacts/${appId}/users/${userId}/games`);
                 playersCollection = collection(db, `artifacts/${appId}/users/${userId}/players`);
+                // Public data for sessions
                 sessionsCollection = collection(db, `artifacts/${appId}/public/data/sessions`);
                 setupEventListeners();
                 loadInitialData();
@@ -506,7 +508,7 @@
             } else {
                 setupScreen.classList.add('hidden');
                 gameScreen.classList.add('hidden');
-                endGameModal.classList.add('hidden'); // Ensure end game modal is hidden when going to lobby
+                endGameModal.classList.add('hidden');
                 lobbyScreen.classList.remove('hidden');
                 renderLobby();
             }
