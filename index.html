@@ -193,6 +193,13 @@
                 <button id="return-to-lobby-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-md">Back to Lobby</button>
             </div>
         </div>
+        <div id="enter-name-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center p-4">
+            <div class="bg-gray-800 w-full max-w-md rounded-lg shadow-xl p-6">
+                <h3 class="text-2xl font-bold mb-4 text-white">Enter Your Name for this Session</h3>
+                <input type="text" id="session-name-input" placeholder="e.g., Captain Chris" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white mb-4">
+                <button id="confirm-name-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Confirm Name</button>
+            </div>
+        </div>
     </div>
     <div id="notification" class="fixed bottom-5 right-5 bg-red-600 text-white py-3 px-5 rounded-lg shadow-lg opacity-0 transition-opacity duration-500 z-50"></div>
 
@@ -228,7 +235,6 @@
         const lobbyScreen = document.getElementById('lobby-screen');
         const gameScreen = document.getElementById('game-screen');
         const gameControls = document.getElementById('game-controls');
-        const guestView = document.getElementById('guest-view');
         const createGameNightBtn = document.getElementById('create-game-night-btn');
         const joinGameBtn = document.getElementById('join-game-btn');
         const joinCodeInput = document.getElementById('join-code-input');
@@ -243,6 +249,9 @@
         const managePlayersModal = document.getElementById('manage-players-modal');
         const leaderboardModal = document.getElementById('leaderboard-modal');
         const endGameModal = document.getElementById('end-game-modal');
+        const enterNameModal = document.getElementById('enter-name-modal');
+        const sessionNameInput = document.getElementById('session-name-input');
+        const confirmNameBtn = document.getElementById('confirm-name-btn');
         const closeGamesModalBtn = document.getElementById('close-games-modal-btn');
         const closePlayersModalBtn = document.getElementById('close-players-modal-btn');
         const viewLeaderboardBtn = document.getElementById('view-leaderboard-btn');
@@ -363,8 +372,8 @@
             viewLeaderboardBtn.addEventListener('click', () => { renderSessionLeaderboard(); leaderboardModal.classList.remove('hidden'); });
             closeLeaderboardModalBtn.addEventListener('click', () => leaderboardModal.classList.add('hidden'));
             newSessionBtn.addEventListener('click', startNewSession);
-            createGameNightBtn.addEventListener('click', createGameNight);
-            joinGameBtn.addEventListener('click', joinGameSession);
+            createGameNightBtn.addEventListener('click', () => promptForName(true));
+            joinGameBtn.addEventListener('click', () => promptForName(false));
             leaveSessionBtn.addEventListener('click', leaveSession);
             lobbyStartGameBtn.addEventListener('click', startGame);
             endRoundBtn.addEventListener('click', endRound);
@@ -438,7 +447,7 @@
             state.currentSession.participants.forEach(p => {
                 const div = document.createElement('div');
                 div.className = 'bg-gray-700 p-3 rounded-md text-center';
-                div.innerHTML = `<p class="font-semibold truncate">${p.userId.substring(0, 8)}...</p>${p.userId === state.currentSession.hostId ? '<p class="text-xs text-indigo-400 font-bold">HOST</p>' : ''}`;
+                div.innerHTML = `<p class="font-semibold truncate">${p.name || p.userId.substring(0,8)}</p>${p.userId === state.currentSession.hostId ? '<p class="text-xs text-indigo-400 font-bold">HOST</p>' : ''}`;
                 lobbyParticipantList.appendChild(div);
             });
             renderLobbyPlayerSelection();
@@ -543,9 +552,11 @@
 
         function renderSessionLeaderboard() {
             sessionLeaderboardContent.innerHTML = '';
+            
             const kingOfTheHillBanner = document.createElement('div');
             kingOfTheHillBanner.className = 'p-4 bg-gradient-to-br from-amber-400 to-yellow-500 text-black rounded-lg mb-6 text-center shadow-lg';
             const sessionTotalWins = Object.entries(state.sessionStats.totalWins);
+
             if (sessionTotalWins.length > 0) {
                 sessionTotalWins.sort(([, a], [, b]) => b - a);
                 const topWins = sessionTotalWins[0][1];
@@ -556,9 +567,11 @@
                 kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-wider">King of the Session</h4><p class="text-2xl font-bold">The Throne is Empty!</p><p class="text-sm">Play a game to crown a winner.</p>`;
             }
             sessionLeaderboardContent.appendChild(kingOfTheHillBanner);
+
             const gameKingsList = document.createElement('div');
             gameKingsList.className = 'space-y-4';
             const sessionGameWins = Object.entries(state.sessionStats.gameWins);
+
             if (sessionGameWins.length === 0) {
                  gameKingsList.innerHTML = `<p class="text-center text-gray-400">No specific game champions yet.</p>`;
             } else {
@@ -583,7 +596,21 @@
             sessionLeaderboardContent.appendChild(gameKingsList);
         }
         
-        async function createGameNight() {
+        function promptForName(isCreating) {
+            enterNameModal.classList.remove('hidden');
+            confirmNameBtn.onclick = () => {
+                const name = sessionNameInput.value.trim();
+                if (!name) {
+                    showNotification("Please enter a name.", true);
+                    return;
+                }
+                enterNameModal.classList.add('hidden');
+                if(isCreating) createGameNight(name);
+                else joinGameSession(name);
+            };
+        }
+
+        async function createGameNight(hostName) {
             let newCode;
             let codeExists = true;
             while(codeExists) {
@@ -593,7 +620,7 @@
             }
             await setDoc(doc(sessionsCollection, newCode), {
                 hostId: userId,
-                participants: [{userId}],
+                participants: [{userId, name: hostName}],
                 currentGame: null,
                 createdAt: Date.now(),
                 selectedGameId: null,
@@ -602,14 +629,14 @@
             subscribeToSession(newCode);
         }
 
-        async function joinGameSession() {
+        async function joinGameSession(playerName) {
             const code = joinCodeInput.value;
             if (code.length !== 4) { showNotification("Code must be 4 digits.", true); return; }
             const sessionRef = doc(sessionsCollection, code);
             const docSnap = await getDoc(sessionRef);
 
             if (docSnap.exists()) {
-                await updateDoc(sessionRef, { participants: arrayUnion({userId}) });
+                await updateDoc(sessionRef, { participants: arrayUnion({userId, name: playerName}) });
                 subscribeToSession(code);
             } else {
                 showNotification("Game session not found.", true);
@@ -837,8 +864,8 @@
         }
 
         function startGame() {
-            const selectedGameId = lobbyGameSelect.value;
-            const selectedPlayerIds = state.lobbySelectedPlayerIds;
+            const selectedGameId = state.currentSession.selectedGameId;
+            const selectedPlayerIds = state.currentSession.lobbySelectedPlayerIds;
             if (!selectedGameId || selectedPlayerIds.length < 1) { showNotification("Please select a game and at least one player.", true); return; }
             const gameToPlay = state.games.find(g => g.id === selectedGameId);
             localStorage.setItem('lastPlayedGameId', selectedGameId);
@@ -885,10 +912,9 @@
             stopTimer();
             if (unsubscribeSession) { unsubscribeSession(); unsubscribeSession = null; }
             state.currentGame = null; state.gameState = null; state.currentSession = null;
-            state.lobbySelectedPlayerIds = [];
+            setupScreen.classList.remove('hidden');
             lobbyScreen.classList.add('hidden');
             gameScreen.classList.add('hidden');
-            setupScreen.classList.remove('hidden');
         }
 
         function showNotification(message, isError = false, duration = 3000) {
@@ -907,7 +933,7 @@
         function handleDragEnd(e) { if(draggedItem) draggedItem.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
         function handleDragOver(e) { e.preventDefault(); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over'); }
         function getDragAfterElement(container, y) { const draggableElements = [...container.querySelectorAll('.player-list-item:not(.dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
-        function handleDrop(e) { e.preventDefault(); if(!draggedItem) return; const id = draggedItem.dataset.id; const fromIndex = state.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.changedTouches ? e.changedTouches[0].clientY : e.clientY); const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length; const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.lobbySelectedPlayerIds.splice(toIndex, 0, item); renderLobbyPlayerSelection(); }
+        function handleDrop(e) { e.preventDefault(); if(!draggedItem) return; const id = draggedItem.dataset.id; const fromIndex = state.currentSession.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.changedTouches ? e.changedTouches[0].clientY : e.clientY); const toIndex = afterElement ? state.currentSession.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.currentSession.lobbySelectedPlayerIds.length; const item = state.currentSession.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.currentSession.lobbySelectedPlayerIds.splice(toIndex, 0, item); updateSession({ lobbySelectedPlayerIds: state.currentSession.lobbySelectedPlayerIds }); }
         function handleTouchStart(e) { const target = e.target.closest('.player-list-item'); if (!target) return; draggedItem = target; touchStartY = e.touches[0].clientY; draggedItem.classList.add('dragging'); e.preventDefault();}
         function handleTouchMove(e) { if (!draggedItem) return; e.preventDefault(); const y = e.touches[0].clientY; draggedItem.style.transform = `translateY(${y - touchStartY}px)`; const afterElement = getDragAfterElement(lobbySelectedPlayers, y); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over');}
         function handleTouchEnd(e) { if (!draggedItem) return; draggedItem.classList.remove('dragging'); draggedItem.style.transform = ''; handleDrop(e); draggedItem = null;}
