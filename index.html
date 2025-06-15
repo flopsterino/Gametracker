@@ -302,7 +302,7 @@
                 document.querySelector('#loading-overlay .loader').classList.add('hidden');
                 showNotification("Could not connect. Please check your network and refresh.", true, 10000);
             }
-        }, 10000); // 10-second timeout
+        }, 10000); 
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -355,7 +355,7 @@
             onSnapshot(playersCollection, (snapshot) => {
                 state.players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderPlayerList();
-                 if (!lobbyScreen.classList.contains('hidden')) {
+                 if (state.currentSession) {
                     renderLobbyPlayerSelection();
                 }
             }, (error) => { console.error("Error loading players:", error); showNotification("Could not load players.", true); });
@@ -367,7 +367,7 @@
             closeGamesModalBtn.addEventListener('click', () => manageGamesModal.classList.add('hidden'));
             saveGameBtn.addEventListener('click', saveGame);
             closePlayersModalBtn.addEventListener('click', () => managePlayersModal.classList.add('hidden'));
-            addPlayerBtn.addEventListener('click', addPlayer);
+            addPlayerBtn.addEventListener('click', () => addPlayer());
             analyzeRulesBtn.addEventListener('click', analyzeGameRules);
             viewLeaderboardBtn.addEventListener('click', () => { renderSessionLeaderboard(); leaderboardModal.classList.remove('hidden'); });
             closeLeaderboardModalBtn.addEventListener('click', () => leaderboardModal.classList.add('hidden'));
@@ -386,7 +386,7 @@
                 const playerId = e.target.value;
                 if(playerId) {
                     updateSession({ lobbySelectedPlayerIds: arrayUnion(playerId) });
-                    e.target.value = ""; // Reset dropdown
+                    e.target.value = "";
                 }
             });
             // Touch and Mouse Drag Events
@@ -648,7 +648,18 @@
             if (unsubscribeSession) unsubscribeSession();
             unsubscribeSession = onSnapshot(doc(sessionsCollection, sessionId), (doc) => {
                 if(doc.exists()) {
-                    updateUIBasedOnState({ id: doc.id, ...doc.data() });
+                    const sessionData = { id: doc.id, ...doc.data() };
+                    updateUIBasedOnState(sessionData);
+
+                    // Auto-add players for the host
+                    if (sessionData.hostId === userId) {
+                        const existingPlayerNames = state.players.map(p => p.name.toLowerCase());
+                        sessionData.participants.forEach(p => {
+                            if (p.name && !existingPlayerNames.includes(p.name.toLowerCase())) {
+                                addPlayer(p.name);
+                            }
+                        });
+                    }
                 } else {
                     showNotification("Game session has ended.", false);
                     resetApp();
@@ -801,10 +812,19 @@
             catch (error) { showNotification('Error: Could not save game.', true); }
         }
         
-        async function addPlayer() {
-            const name = playerNameInput.value.trim();
-            if (!name) return;
-            try { await addDoc(playersCollection, { name, totalWins: 0, totalGamesPlayed: 0 }); playerNameInput.value = ''; } 
+        async function addPlayer(name) {
+            const playerName = name || playerNameInput.value.trim();
+            if (!playerName) return;
+            
+            const isDuplicate = state.players.some(p => p.name.toLowerCase() === playerName.toLowerCase());
+            if (isDuplicate) {
+                 if (!name) showNotification("Player with this name already exists.", true);
+                 return;
+            }
+
+            try { await addDoc(playersCollection, { name: playerName, totalWins: 0, totalGamesPlayed: 0 }); 
+                if (!name) playerNameInput.value = ''; 
+            } 
             catch (error) { showNotification('Error: Could not add player.', true); }
         }
         
