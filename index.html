@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Board Game Score Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="https://placehold.co/192x192/000000/ffffff?text=BGS">
+    <meta name="theme-color" content="#1f2937">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #e5e7eb;
+        }
+        .modal-backdrop {
+            background-color: rgba(0,0,0,0.7);
+        }
+        .loader {
+            border-top-color: #3b82f6;
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+        @-webkit-keyframes spinner {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .player-list-item.dragging {
+            opacity: 0.5;
+            background: #4b5563;
+        }
+        .drag-over {
+            border-top: 2px solid #3b82f6;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-90 flex flex-col items-center justify-center z-50">
+        <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-32 w-32 mb-4"></div>
+        <h2 class="text-center text-white text-xl font-semibold">Connecting...</h2>
+        <p class="w-1/2 text-center text-white mt-2">Getting things ready for your game night.</p>
+    </div>
+
+    <div id="app" class="container mx-auto p-4 max-w-4xl">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-white">Board Game Score Tracker</h1>
+            <p class="text-gray-400">Manage your game nights with ease.</p>
+        </header>
+
+        <main id="main-content">
+            <div id="setup-screen" class="space-y-6">
+                <!-- Join Game -->
+                <div>
+                    <h2 class="text-2xl font-semibold mb-3 text-white">Join a Game Night</h2>
+                    <div class="bg-gray-800 p-4 rounded-lg flex items-center gap-4">
+                        <input type="number" id="join-code-input" placeholder="Enter 4-digit code" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white text-center tracking-widest">
+                        <button id="join-game-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-6 rounded-md transition">Join</button>
+                    </div>
+                </div>
+
+                <div class="text-center text-gray-400 font-bold">OR</div>
+
+                <!-- Create Game -->
+                <div>
+                    <button id="create-game-night-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3 px-4 rounded-lg text-lg transition duration-300 transform hover:scale-105">Create a Game Night</button>
+                </div>
+            </div>
+
+            <div id="lobby-screen" class="hidden">
+                <div class="bg-gray-800 p-4 rounded-lg mb-6 text-center">
+                    <p class="text-lg text-gray-400">Game Night In Progress</p>
+                    <p class="text-sm uppercase text-indigo-400 font-bold">Invite Code</p>
+                    <p id="lobby-invite-code" class="text-5xl font-mono font-bold tracking-widest"></p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-lg mb-6">
+                    <h3 class="text-2xl font-bold mb-3">Connected Devices</h3>
+                    <div id="lobby-participant-list" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <!-- JS will populate this with connected user IDs -->
+                    </div>
+                </div>
+                <div id="host-controls" class="hidden space-y-6">
+                     <h2 class="text-2xl font-semibold text-white">Host Controls</h2>
+                     <div class="bg-gray-900 p-4 rounded-lg space-y-4">
+                        <h3 class="text-xl font-semibold">1. Select a Game</h3>
+                        <select id="lobby-game-select" class="w-full bg-gray-700 rounded-md p-2 text-white"></select>
+                    
+                        <h3 class="text-xl font-semibold">2. Select Players for this Game</h3>
+                        <div class="flex flex-col md:flex-row gap-4">
+                            <div class="w-full md:w-1/2">
+                                <h4 class="font-semibold mb-2 text-gray-300">Available Players</h4>
+                                <div id="lobby-available-players" class="space-y-2 max-h-48 overflow-y-auto p-2 bg-gray-800 rounded-md border border-gray-700"></div>
+                            </div>
+                            <div class="w-full md:w-1/2">
+                                <h4 class="font-semibold mb-2 text-gray-300">Selected Players (Drag to Reorder)</h4>
+                                <div id="lobby-selected-players" class="space-y-2 max-h-48 overflow-y-auto p-2 bg-gray-800 rounded-md border border-gray-700"></div>
+                            </div>
+                        </div>
+                     </div>
+                    <button id="lobby-start-game-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 text-lg rounded-md disabled:bg-gray-500 disabled:cursor-not-allowed">Start Game</button>
+                </div>
+                <div id="guest-view" class="hidden text-center text-gray-400 p-6 bg-gray-800 rounded-lg">
+                    <p class="text-xl">Waiting for the host to start the next game...</p>
+                </div>
+                <div class="mt-6 border-t border-gray-700 pt-6">
+                    <h3 class="text-xl font-semibold mb-3 text-center">Session Options</h3>
+                    <div class="flex flex-wrap justify-center gap-4">
+                        <button class="open-manage-players-modal w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Manage My Players</button>
+                        <button class="open-manage-games-modal w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Manage My Games</button>
+                        <button id="view-leaderboard-btn" class="w-full sm:w-auto bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">King of the Session</button>
+                        <button id="leave-session-btn" class="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Leave Game Night</button>
+                    </div>
+                </div>
+            </div>
+
+
+            <div id="game-screen" class="hidden">
+                <div class="bg-gray-800 p-4 rounded-lg mb-4">
+                     <div class="flex justify-between items-start mb-3">
+                        <h2 id="game-title-display" class="text-3xl font-bold"></h2>
+                        <div class="text-center bg-indigo-600 p-2 rounded-lg">
+                            <p class="text-xs uppercase font-bold text-indigo-200">Invite Code</p>
+                            <p id="game-code-display" class="text-2xl font-bold font-mono"></p>
+                        </div>
+                    </div>
+                    <div class="flex justify-around items-center text-center border-t border-gray-700 pt-3">
+                        <div><p class="text-sm uppercase text-gray-400">Target Score</p><p id="target-score-display" class="text-2xl font-bold text-amber-400"></p></div>
+                        <div><p class="text-sm uppercase text-gray-400">Current Round</p><p id="round-counter" class="text-2xl font-bold">1</p></div>
+                        <div><p class="text-sm uppercase text-gray-400">Time Elapsed</p><p id="timer" class="text-2xl font-bold font-mono">00:00:00</p></div>
+                    </div>
+                </div>
+                <div id="scoreboard" class="space-y-3"></div>
+                <div id="game-host-controls" class="hidden mt-6 flex flex-col sm:flex-row gap-3">
+                    <button id="end-round-btn" class="w-full sm:w-1/2 bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-4 rounded-md transition duration-300">End Current Round</button>
+                    <button id="end-game-early-btn" class="w-full sm:w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">End Game Early</button>
+                </div>
+            </div>
+        </main>
+
+        <div id="manage-games-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center p-4">
+             <div class="bg-gray-800 w-full max-w-md rounded-lg shadow-xl p-6">
+                <h3 class="text-2xl font-bold mb-4 text-white">Manage My Games</h3>
+                 <div id="game-list" class="space-y-2 mb-4 max-h-40 overflow-y-auto"></div>
+                
+                 <div class="space-y-4 border-t border-gray-700 pt-4">
+                     <textarea id="game-rules-input" placeholder="Paste game rules here to analyze..." class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white h-24"></textarea>
+                     <button id="analyze-rules-btn" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md relative">
+                        Analyze Rules
+                        <div id="analyze-loader" class="hidden absolute right-4 top-1/2 -translate-y-1/2 loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-6 w-6"></div>
+                    </button>
+                 </div>
+
+                <div class="space-y-4 border-t border-gray-700 pt-4 mt-4">
+                    <h4 class="text-lg font-semibold">Or Add Manually:</h4>
+                    <input type="text" id="game-name-input" placeholder="Game Name" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white">
+                    <input type="number" id="game-score-input" placeholder="Winning Score" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white">
+                    <select id="game-condition-select" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white"><option value="highest">Highest Score Wins</option><option value="lowest">Lowest Score Wins</option></select>
+                    <div class="flex items-center"><input type="checkbox" id="final-round-mode-checkbox" class="h-4 w-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"><label for="final-round-mode-checkbox" class="ml-2 text-white">Final Round Mode</label></div>
+                </div>
+                <div class="mt-6 flex justify-between"><button id="save-game-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Add Game</button><button id="close-games-modal-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Close</button></div>
+            </div>
+        </div>
+        <div id="manage-players-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center p-4">
+            <div class="bg-gray-800 w-full max-w-md rounded-lg shadow-xl p-6">
+                 <h3 class="text-2xl font-bold mb-4 text-white">Manage My Players</h3>
+                 <div id="player-list" class="space-y-2 mb-4 max-h-60 overflow-y-auto"></div>
+                 <div class="flex gap-2"><input type="text" id="player-name-input" placeholder="Player Name" class="flex-grow bg-gray-700 border border-gray-600 rounded-md p-2 text-white"><button id="add-player-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Add</button></div>
+                 <div class="mt-6 text-right"><button id="close-players-modal-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Close</button></div>
+            </div>
+        </div>
+        <div id="leaderboard-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center p-4">
+            <div class="bg-gray-800 w-full max-w-lg rounded-lg shadow-xl p-6">
+                <h3 class="text-2xl font-bold mb-4 text-white">King of the Session</h3>
+                <div id="session-leaderboard-content" class="max-h-96 overflow-y-auto"></div>
+                <div class="mt-6 flex justify-between items-center"><button id="new-session-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">New Session</button><button id="close-leaderboard-modal-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Close</button></div>
+            </div>
+        </div>
+        <div id="end-game-modal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center p-4">
+            <div class="bg-gray-800 w-full max-w-md rounded-lg shadow-xl p-6 text-center">
+                <h3 id="end-game-title" class="text-3xl font-bold mb-4 text-white">Game Over!</h3><div id="final-scores" class="space-y-2 mb-6"></div>
+                <button id="return-to-lobby-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-md">Back to Lobby</button>
+            </div>
+        </div>
+    </div>
+    <div id="notification" class="fixed bottom-5 right-5 bg-red-600 text-white py-3 px-5 rounded-lg shadow-lg opacity-0 transition-opacity duration-500 z-50"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, addDoc, getDoc, deleteDoc, onSnapshot, updateDoc, increment, setDoc, arrayUnion, arrayRemove, writeBatch, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "YOUR_API_KEY", authDomain: "YOUR_AUTH_DOMAIN", projectId: "YOUR_PROJECT_ID" };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-board-game-pwa';
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        setLogLevel('debug');
+
+        let userId;
+        let unsubscribeSession = null; 
+
+        // DOM Elements
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const notification = document.getElementById('notification');
+        const setupScreen = document.getElementById('setup-screen');
+        const lobbyScreen = document.getElementById('lobby-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const hostControls = document.getElementById('host-controls');
+        const gameHostControls = document.getElementById('game-host-controls');
+        const guestView = document.getElementById('guest-view');
+        const createGameNightBtn = document.getElementById('create-game-night-btn');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const joinCodeInput = document.getElementById('join-code-input');
+        const lobbyInviteCode = document.getElementById('lobby-invite-code');
+        const lobbyParticipantList = document.getElementById('lobby-participant-list');
+        const lobbyGameSelect = document.getElementById('lobby-game-select');
+        const lobbyAvailablePlayers = document.getElementById('lobby-available-players');
+        const lobbySelectedPlayers = document.getElementById('lobby-selected-players');
+        const lobbyStartGameBtn = document.getElementById('lobby-start-game-btn');
+        const leaveSessionBtn = document.getElementById('leave-session-btn');
+        const manageGamesModal = document.getElementById('manage-games-modal');
+        const managePlayersModal = document.getElementById('manage-players-modal');
+        const leaderboardModal = document.getElementById('leaderboard-modal');
+        const endGameModal = document.getElementById('end-game-modal');
+        const closeGamesModalBtn = document.getElementById('close-games-modal-btn');
+        const closePlayersModalBtn = document.getElementById('close-players-modal-btn');
+        const viewLeaderboardBtn = document.getElementById('view-leaderboard-btn');
+        const closeLeaderboardModalBtn = document.getElementById('close-leaderboard-modal-btn');
+        const newSessionBtn = document.getElementById('new-session-btn');
+        const gameList = document.getElementById('game-list');
+        const saveGameBtn = document.getElementById('save-game-btn');
+        const gameNameInput = document.getElementById('game-name-input');
+        const gameScoreInput = document.getElementById('game-score-input');
+        const gameConditionSelect = document.getElementById('game-condition-select');
+        const finalRoundModeCheckbox = document.getElementById('final-round-mode-checkbox');
+        const gameRulesInput = document.getElementById('game-rules-input');
+        const analyzeRulesBtn = document.getElementById('analyze-rules-btn');
+        const analyzeLoader = document.getElementById('analyze-loader');
+        const playerList = document.getElementById('player-list');
+        const addPlayerBtn = document.getElementById('add-player-btn');
+        const playerNameInput = document.getElementById('player-name-input');
+        const endRoundBtn = document.getElementById('end-round-btn');
+        const endGameEarlyBtn = document.getElementById('end-game-early-btn');
+        const returnToLobbyBtn = document.getElementById('return-to-lobby-btn');
+        const roundCounter = document.getElementById('round-counter');
+        const timerDisplay = document.getElementById('timer');
+        const targetScoreDisplay = document.getElementById('target-score-display');
+        const gameTitleDisplay = document.getElementById('game-title-display');
+        const gameCodeDisplay = document.getElementById('game-code-display');
+        const finalScores = document.getElementById('final-scores');
+        const endGameTitle = document.getElementById('end-game-title');
+        const sessionLeaderboardContent = document.getElementById('session-leaderboard-content');
+
+        // App State
+        let state = {
+            games: [], players: [],
+            currentGame: null, gameState: null, 
+            timerInterval: null, startTime: null,
+            sessionStats: { totalWins: {}, gameWins: {} },
+            currentSession: null, 
+            lobbySelectedPlayerIds: [],
+        };
+        
+        let gamesCollection, playersCollection, sessionsCollection;
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user && userId !== user.uid) { userId = user.uid; initApp(); } 
+            else if (!user) { try { await signInAnonymously(auth); } catch (error) { console.error(error); } }
+        });
+
+        function initApp() {
+            if (!userId) return;
+            gamesCollection = collection(db, `artifacts/${appId}/users/${userId}/games`);
+            playersCollection = collection(db, `artifacts/${appId}/users/${userId}/players`);
+            sessionsCollection = collection(db, `artifacts/${appId}/public/data/sessions`);
+            setupEventListeners();
+            loadInitialData();
+            loadingOverlay.classList.add('hidden');
+        }
+
+        async function loadInitialData() {
+            onSnapshot(gamesCollection, (snapshot) => {
+                state.games = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderGameList();
+                renderLobbyGameSelect();
+            });
+            onSnapshot(playersCollection, (snapshot) => {
+                state.players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderPlayerList();
+            });
+        }
+        
+        function setupEventListeners() {
+            document.querySelectorAll('.open-manage-games-modal').forEach(btn => btn.addEventListener('click', () => manageGamesModal.classList.remove('hidden')));
+            document.querySelectorAll('.open-manage-players-modal').forEach(btn => btn.addEventListener('click', () => managePlayersModal.classList.remove('hidden')));
+            closeGamesModalBtn.addEventListener('click', () => manageGamesModal.classList.add('hidden'));
+            saveGameBtn.addEventListener('click', saveGame);
+            closePlayersModalBtn.addEventListener('click', () => managePlayersModal.classList.add('hidden'));
+            addPlayerBtn.addEventListener('click', addPlayer);
+            analyzeRulesBtn.addEventListener('click', analyzeGameRules);
+            viewLeaderboardBtn.addEventListener('click', () => { renderSessionLeaderboard(); leaderboardModal.classList.remove('hidden'); });
+            closeLeaderboardModalBtn.addEventListener('click', () => leaderboardModal.classList.add('hidden'));
+            newSessionBtn.addEventListener('click', startNewSession);
+            createGameNightBtn.addEventListener('click', createGameNight);
+            joinGameBtn.addEventListener('click', joinGameSession);
+            leaveSessionBtn.addEventListener('click', leaveSession);
+            lobbyStartGameBtn.addEventListener('click', startGame);
+            endRoundBtn.addEventListener('click', endRound);
+            endGameEarlyBtn.addEventListener('click', () => updateSession({ "currentGame.isFinished": true }));
+            returnToLobbyBtn.addEventListener('click', () => {
+                if (state.currentSession.hostId === userId) {
+                    updateSession({ currentGame: null });
+                }
+                endGameModal.classList.add('hidden');
+            });
+            lobbySelectedPlayers.addEventListener('dragover', handleDragOver);
+            lobbySelectedPlayers.addEventListener('drop', handleDrop);
+        }
+        
+        function renderLobbyGameSelect() {
+            lobbyGameSelect.innerHTML = '<option value="">-- Select a Game to Play --</option>';
+            state.games.forEach(game => {
+                const option = document.createElement('option');
+                option.value = game.id;
+                option.textContent = game.name;
+                lobbyGameSelect.appendChild(option);
+            });
+        }
+
+        function renderGameList() {
+            gameList.innerHTML = '';
+            if (state.games.length === 0) gameList.innerHTML = `<p class="text-gray-400">No games added yet.</p>`;
+            else state.games.forEach(game => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-gray-700 p-2 rounded-md';
+                div.innerHTML = `<span>${game.name} (${game.winningScore} pts)</span><button data-id="${game.id}" class="delete-game-btn bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded">Delete</button>`;
+                gameList.appendChild(div);
+            });
+            document.querySelectorAll('.delete-game-btn').forEach(btn => btn.addEventListener('click', (e) => deleteGame(e.target.dataset.id)));
+        }
+
+        function renderPlayerList() {
+            playerList.innerHTML = '';
+            if (state.players.length === 0) playerList.innerHTML = `<p class="text-gray-400">No players added yet.</p>`;
+            else state.players.forEach(player => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-gray-700 p-2 rounded-md';
+                div.innerHTML = `<span>${player.name}</span><button data-id="${player.id}" class="delete-player-btn bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded">Delete</button>`;
+                playerList.appendChild(div);
+            });
+            document.querySelectorAll('.delete-player-btn').forEach(btn => btn.addEventListener('click', (e) => deletePlayer(e.target.dataset.id)));
+        }
+
+        function renderLobby() {
+            if (!state.currentSession) return;
+            lobbyInviteCode.textContent = state.currentSession.id;
+            const isHost = state.currentSession.hostId === userId;
+            hostControls.classList.toggle('hidden', !isHost);
+            guestView.classList.toggle('hidden', isHost);
+            lobbyParticipantList.innerHTML = '';
+            state.currentSession.participants.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-700 p-3 rounded-md text-center';
+                div.innerHTML = `<p class="font-semibold truncate">${p.userId.substring(0, 8)}...</p>${p.userId === state.currentSession.hostId ? '<p class="text-xs text-indigo-400 font-bold">HOST</p>' : ''}`;
+                lobbyParticipantList.appendChild(div);
+            });
+            if (isHost) renderLobbyPlayerSelection();
+        }
+
+        function renderLobbyPlayerSelection() {
+            lobbyAvailablePlayers.innerHTML = '';
+            lobbySelectedPlayers.innerHTML = '';
+            const available = state.players.filter(p => !state.lobbySelectedPlayerIds.includes(p.id));
+            available.forEach(p => {
+                const div = createPlayerListItem(p, false);
+                div.onclick = () => { state.lobbySelectedPlayerIds.push(p.id); renderLobbyPlayerSelection(); };
+                lobbyAvailablePlayers.appendChild(div);
+            });
+            state.lobbySelectedPlayerIds.forEach(id => {
+                const player = state.players.find(p => p.id === id);
+                if (player) {
+                    const div = createPlayerListItem(player, true);
+                    div.onclick = () => { state.lobbySelectedPlayerIds = state.lobbySelectedPlayerIds.filter(pid => pid !== id); renderLobbyPlayerSelection(); };
+                    lobbySelectedPlayers.appendChild(div);
+                }
+            });
+        }
+        
+        function createPlayerListItem(player, isSelected) {
+            const div = document.createElement('div');
+            div.dataset.id = player.id;
+            div.className = 'player-list-item p-2 rounded-md cursor-pointer transition-all flex items-center justify-between';
+            if (isSelected) {
+                div.classList.add('bg-blue-600', 'hover:bg-blue-700', 'text-white');
+                div.draggable = true;
+                div.innerHTML = `<span>${player.name}</span> <span class="text-gray-300">☰</span>`;
+                div.addEventListener('dragstart', handleDragStart);
+                div.addEventListener('dragend', handleDragEnd);
+            } else {
+                div.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                div.textContent = player.name;
+            }
+            return div;
+        }
+
+        function updateUIBasedOnState(sessionData) {
+            state.currentSession = sessionData;
+            if (sessionData.currentGame) {
+                setupScreen.classList.add('hidden');
+                lobbyScreen.classList.add('hidden');
+                gameScreen.classList.remove('hidden');
+                renderGameState(sessionData.currentGame);
+                gameHostControls.classList.toggle('hidden', sessionData.hostId !== userId);
+            } else {
+                setupScreen.classList.add('hidden');
+                gameScreen.classList.add('hidden');
+                lobbyScreen.classList.remove('hidden');
+                renderLobby();
+            }
+        }
+        
+        function renderGameState(gameState) {
+            state.gameState = gameState;
+            const gameInfo = state.games.find(g => g.id === gameState.gameId);
+            if (!gameInfo) { showNotification("Game data not found!"); leaveSession(); return; }
+            state.currentGame = gameInfo;
+            gameTitleDisplay.textContent = gameInfo.name;
+            targetScoreDisplay.textContent = `${gameInfo.winningScore} pts`;
+            roundCounter.textContent = gameState.round;
+            gameCodeDisplay.textContent = state.currentSession.id;
+            if (!state.timerInterval && gameState.startTime) {
+                state.startTime = gameState.startTime;
+                startTimer();
+            }
+            renderScoreboard();
+            if (gameState.isFinished) {
+                triggerEndGame("Game Over");
+            }
+        }
+        
+        async function createGameNight() {
+            let newCode;
+            let codeExists = true;
+            while(codeExists) {
+                newCode = Math.floor(1000 + Math.random() * 9000).toString();
+                const docSnap = await getDoc(doc(sessionsCollection, newCode));
+                codeExists = docSnap.exists();
+            }
+            await setDoc(doc(sessionsCollection, newCode), {
+                hostId: userId,
+                participants: [{userId}],
+                currentGame: null,
+                createdAt: Date.now()
+            });
+            subscribeToSession(newCode);
+        }
+
+        async function joinGameSession() {
+            const code = joinCodeInput.value;
+            if (code.length !== 4) { showNotification("Code must be 4 digits.", true); return; }
+            const sessionRef = doc(sessionsCollection, code);
+            const docSnap = await getDoc(sessionRef);
+
+            if (docSnap.exists()) {
+                await updateDoc(sessionRef, { participants: arrayUnion({userId}) });
+                subscribeToSession(code);
+            } else {
+                showNotification("Game session not found.", true);
+            }
+        }
+
+        function subscribeToSession(sessionId) {
+            state.currentSessionId = sessionId;
+            if (unsubscribeSession) unsubscribeSession();
+            unsubscribeSession = onSnapshot(doc(sessionsCollection, sessionId), (doc) => {
+                if(doc.exists()) {
+                    updateUIBasedOnState({ id: doc.id, ...doc.data() });
+                } else {
+                    showNotification("Game session has ended.", false);
+                    resetApp();
+                }
+            });
+        }
+        
+        async function leaveSession() {
+            if (!state.currentSession) return;
+            const sessionRef = doc(sessionsCollection, state.currentSession.id);
+            const playerProfile = state.currentSession.participants.find(p => p.userId === userId);
+            
+            if (state.currentSession.hostId === userId && state.currentSession.participants.length > 1) {
+                showNotification("Host can't leave a session with other players.", true);
+                return;
+            } else if(state.currentSession.hostId === userId) {
+                 await deleteDoc(sessionRef);
+            } else {
+                await updateDoc(sessionRef, { participants: arrayRemove(playerProfile) });
+            }
+            resetApp();
+        }
+
+        function addScore(playerId, score) {
+            if (!state.gameState) return;
+            const playerIndex = state.gameState.players.findIndex(p => p.id === playerId);
+            if (playerIndex > -1 && !isNaN(score)) {
+                let newPlayers = JSON.parse(JSON.stringify(state.gameState.players));
+                let player = newPlayers[playerIndex];
+                player.score += score;
+                player.roundScores[state.gameState.round] = score;
+                newPlayers[playerIndex] = player;
+                updateSession({ [`currentGame.players`]: newPlayers }).then(() => {
+                    const allScoresIn = newPlayers.every(p => p.roundScores[state.gameState.round] !== undefined);
+                    if (allScoresIn) endRound();
+                });
+            }
+        }
+        
+        async function endRound() {
+            if (state.currentSession.hostId !== userId) return;
+            await updateSession({ [`currentGame.round`]: increment(1) });
+            checkForWinner();
+        }
+
+        async function checkForWinner() {
+            if (!state.currentSession.currentGame) return;
+            let updates = {};
+            const { winningScore, condition, finalRoundMode } = state.games.find(g => g.id === state.currentSession.currentGame.gameId);
+            let { players, isFinalPhase, potentialWinnerStreak, lastRoundLeaderId } = state.currentSession.currentGame;
+            
+            if (players.some(p => p.score >= winningScore)) {
+                if (!isFinalPhase) updates[`currentGame.isFinalPhase`] = true;
+                isFinalPhase = true;
+            }
+            
+            if (isFinalPhase) {
+                if (finalRoundMode) {
+                    const scores = players.map(p => p.score);
+                    const leaderScore = (condition === 'highest') ? Math.max(...scores) : Math.min(...scores);
+                    const leaders = players.filter(p => p.score === leaderScore);
+                    const uniqueLeaderId = leaders.length === 1 ? leaders[0].id : null;
+                    updates[`currentGame.potentialWinnerStreak`] = (uniqueLeaderId && uniqueLeaderId === lastRoundLeaderId) ? potentialWinnerStreak + 1 : 1;
+                    updates[`currentGame.lastRoundLeaderId`] = uniqueLeaderId;
+                    if (updates[`currentGame.potentialWinnerStreak`] >= 2 && uniqueLeaderId) updates[`currentGame.isFinished`] = true;
+                } else {
+                    updates[`currentGame.isFinished`] = true;
+                }
+            }
+            if (Object.keys(updates).length > 0) await updateSession(updates);
+        }
+
+        async function triggerEndGame(title) {
+            stopTimer();
+            const { condition } = state.games.find(g => g.id === state.currentSession.currentGame.gameId);
+            const players = [...state.currentSession.currentGame.players];
+            players.sort((a,b) => condition === 'highest' ? b.score - a.score : a.score - b.score);
+            const winnerScore = players[0].score;
+            const winnerIds = players.filter(p => p.score === winnerScore).map(p => p.id);
+            
+            winnerIds.forEach(id => {
+                state.sessionStats.totalWins[id] = (state.sessionStats.totalWins[id] || 0) + 1;
+                const gameId = state.currentSession.currentGame.gameId;
+                if (!state.sessionStats.gameWins[gameId]) state.sessionStats.gameWins[gameId] = {};
+                state.sessionStats.gameWins[gameId][id] = (state.sessionStats.gameWins[gameId][id] || 0) + 1;
+            });
+            
+            const batch = writeBatch(db);
+            const gameRef = doc(gamesCollection, state.currentSession.currentGame.gameId);
+            winnerIds.forEach(id => batch.update(gameRef, {[`winCounts.${id}`]: increment(1)}));
+            for(const player of players) {
+                const playerRef = doc(playersCollection, player.id);
+                batch.update(playerRef, { totalGamesPlayed: increment(1), totalWins: winnerIds.includes(player.id) ? increment(1) : increment(0) });
+            }
+            await batch.commit();
+            
+            endGameTitle.textContent = title;
+            renderFinalScores(players, condition);
+            gameScreen.classList.add('hidden');
+            endGameModal.classList.remove('hidden');
+        }
+
+        async function updateSession(updates) {
+            if (!state.currentSession) return;
+            const sessionRef = doc(sessionsCollection, state.currentSession.id);
+            await updateDoc(sessionRef, updates);
+        }
+
+        function startNewSession() {
+            state.sessionStats = { totalWins: {}, gameWins: {} };
+            renderSessionLeaderboard();
+            showNotification("New session started!");
+        }
+        
+        async function saveGame() {
+            const name = gameNameInput.value.trim();
+            const winningScore = parseInt(gameScoreInput.value, 10);
+            if (!name || isNaN(winningScore) || winningScore <= 0) { showNotification('Please provide a valid name and score.', true); return; }
+            const gameData = { name, winningScore, condition: gameConditionSelect.value, finalRoundMode: finalRoundModeCheckbox.checked, winCounts: {} };
+            try { await addDoc(gamesCollection, gameData); gameNameInput.value = ''; gameScoreInput.value = ''; gameRulesInput.value = ''; } 
+            catch (error) { showNotification('Error: Could not save game.', true); }
+        }
+        
+        async function addPlayer() {
+            const name = playerNameInput.value.trim();
+            if (!name) return;
+            try { await addDoc(playersCollection, { name, totalWins: 0, totalGamesPlayed: 0 }); playerNameInput.value = ''; } 
+            catch (error) { showNotification('Error: Could not add player.', true); }
+        }
+        
+        async function deleteGame(gameId) { await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/games`, gameId)); }
+        async function deletePlayer(playerId) { await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/players`, playerId)); }
+
+        async function analyzeGameRules() {
+            const rules = gameRulesInput.value;
+            if (!rules.trim()) { showNotification("Please paste some rules to analyze.", true); return; }
+            analyzeLoader.classList.remove('hidden');
+            analyzeRulesBtn.disabled = true;
+            const prompt = `You are a board game expert. Analyze the following game rules and extract the game's name, the score needed to win, the winning condition (highest or lowest score wins), and whether a final round is triggered after the score is reached. Provide the response as a JSON object with the keys "gameName", "winningScore", "winningCondition" (either "highest" or "lowest"), and "finalRoundMode" (boolean). If a value cannot be determined, return null for that key. Game Rules: ${rules}`;
+            let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+            const payload = { 
+                contents: chatHistory,
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "gameName": { "type": "STRING" },
+                            "winningScore": { "type": "NUMBER" },
+                            "winningCondition": { "type": "STRING" },
+                            "finalRoundMode": { "type": "BOOLEAN" }
+                        }
+                    }
+                }
+            };
+            const apiKey = ""
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const result = await response.json();
+                if (result.candidates && result.candidates[0].content.parts[0].text) {
+                    const data = JSON.parse(result.candidates[0].content.parts[0].text);
+                    gameNameInput.value = data.gameName || '';
+                    gameScoreInput.value = data.winningScore || '';
+                    if (data.winningCondition === 'highest' || data.winningCondition === 'lowest') {
+                        gameConditionSelect.value = data.winningCondition;
+                    }
+                    finalRoundModeCheckbox.checked = data.finalRoundMode || false;
+                    showNotification("Rules analyzed successfully!");
+                } else {
+                    throw new Error("Invalid response from AI.");
+                }
+            } catch (error) {
+                console.error("Error analyzing rules:", error);
+                showNotification("Could not analyze rules. Please try again or enter manually.", true);
+            } finally {
+                analyzeLoader.classList.add('hidden');
+                analyzeRulesBtn.disabled = false;
+            }
+        }
+
+        function startGame() {
+            const selectedGameId = lobbyGameSelect.value;
+            const selectedPlayerIds = state.lobbySelectedPlayerIds;
+            if (!selectedGameId || selectedPlayerIds.length < 1) { showNotification("Please select a game and at least one player.", true); return; }
+            const gameToPlay = state.games.find(g => g.id === selectedGameId);
+            localStorage.setItem('lastPlayedGameId', selectedGameId);
+            const initialGameState = {
+                gameId: gameToPlay.id, round: 1, startTime: Date.now(),
+                players: selectedPlayerIds.map(id => ({ id, score: 0, roundScores: {} })),
+                isFinalPhase: false, isFinished: false,
+                potentialWinnerStreak: 0, lastRoundLeaderId: null,
+            };
+            updateSession({ currentGame: initialGameState });
+        }
+        
+        function renderFinalScores(players, condition) {
+            finalScores.innerHTML = '';
+            const winnerScore = players[0].score;
+            players.forEach(player => {
+                const playerInfo = state.players.find(p => p.id === player.id);
+                if (!playerInfo) return;
+                const p = document.createElement('p');
+                p.className = 'text-lg p-2 rounded-md';
+                let highlightClass = '';
+                if (condition === 'highest' && player.score === winnerScore) highlightClass = 'bg-green-500 text-white font-bold';
+                else if (condition === 'lowest') {
+                    if (player.score === winnerScore) highlightClass = 'bg-green-500 text-white font-bold';
+                    const maxScore = Math.max(...players.map(p => p.score));
+                    if (player.score === maxScore && maxScore !== winnerScore) highlightClass = 'bg-red-500 text-white font-bold';
+                }
+                p.className += ` ${highlightClass}`;
+                p.textContent = `${playerInfo.name}: ${player.score} points`;
+                finalScores.appendChild(p);
+            });
+        }
+
+        function startTimer() { if (state.timerInterval) clearInterval(state.timerInterval); state.timerInterval = setInterval(() => { const elapsed = Date.now() - state.startTime; const seconds = Math.floor((elapsed / 1000) % 60).toString().padStart(2, '0'); const minutes = Math.floor((elapsed / (1000 * 60)) % 60).toString().padStart(2, '0'); const hours = Math.floor((elapsed / (1000 * 60 * 60)) % 24).toString().padStart(2, '0'); timerDisplay.textContent = `${hours}:${minutes}:${seconds}`; }, 1000); }
+        function stopTimer() { clearInterval(state.timerInterval); state.timerInterval = null; }
+
+        function resetApp() {
+            stopTimer();
+            if (unsubscribeSession) { unsubscribeSession(); unsubscribeSession = null; }
+            state.currentGame = null; state.gameState = null; state.currentSession = null;
+            state.lobbySelectedPlayerIds = [];
+            lobbyScreen.classList.add('hidden');
+            gameScreen.classList.add('hidden');
+            setupScreen.classList.remove('hidden');
+        }
+
+        function showNotification(message, isError = false, duration = 3000) {
+            notification.textContent = message;
+            notification.classList.toggle('bg-red-600', isError);
+            notification.classList.toggle('bg-green-600', !isError);
+            notification.classList.remove('opacity-0');
+            setTimeout(() => {
+                notification.classList.add('opacity-0');
+            }, duration);
+        }
+
+        let draggedItem = null;
+        function handleDragStart(e) { draggedItem = e.target; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', e.target.dataset.id); setTimeout(() => e.target.classList.add('dragging'), 0); }
+        function handleDragEnd(e) { e.target.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
+        function handleDragOver(e) { e.preventDefault(); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); if (afterElement) afterElement.classList.add('drag-over'); }
+        function getDragAfterElement(container, y) { const draggableElements = [...container.querySelectorAll('.player-list-item:not(.dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
+        function handleDrop(e) { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); const fromIndex = state.lobbySelectedPlayerIds.indexOf(id); const afterElement = getDragAfterElement(lobbySelectedPlayers, e.clientY); const toIndex = afterElement ? state.lobbySelectedPlayerIds.indexOf(afterElement.dataset.id) : state.lobbySelectedPlayerIds.length; const item = state.lobbySelectedPlayerIds.splice(fromIndex, 1)[0]; state.lobbySelectedPlayerIds.splice(toIndex, 0, item); renderLobbyPlayerSelection(); }
+
+        const manifest = { "name": "Board Game Score Tracker", "short_name": "ScoreTrack", "start_url": ".", "display": "standalone", "background_color": "#111827", "theme_color": "#1f2937", "description": "A PWA to track scores for your board game nights.", "icons": [{"src": "https://placehold.co/192x192/000000/ffffff?text=BGS","sizes": "192x192","type": "image/png"}, {"src": "https://placehold.co/512x512/000000/ffffff?text=BGS","sizes": "512x512","type": "image/png"}] };
+        const swContent = `const CACHE_NAME='board-game-scorer-v16';const urlsToCache=['/','index.html','https://cdn.tailwindcss.com'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(urlsToCache))));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`;
+        const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+        const manifestURL = URL.createObjectURL(manifestBlob);
+        document.querySelector('link[rel="manifest"]').setAttribute('href', manifestURL);
+        if ('serviceWorker' in navigator) { const swBlob = new Blob([swContent], { type: 'application/javascript' }); const swURL = URL.createObjectURL(swBlob); window.addEventListener('load', () => { navigator.serviceWorker.register(swURL).then(reg => console.log('SW registered.')).catch(err => console.log('SW reg failed: ', err)); }); }
+    </script>
+</body>
+</html>
