@@ -87,7 +87,7 @@
                         <!-- JS will populate this -->
                     </div>
                 </div>
-                <div class="space-y-6">
+                <div id="setup-controls" class="space-y-6">
                      <h2 class="text-2xl font-semibold text-white">Game Setup</h2>
                      <div class="bg-gray-900 p-4 rounded-lg space-y-4">
                         <h3 class="text-xl font-semibold">1. Select a Game</h3>
@@ -289,7 +289,8 @@
             currentGame: null, gameState: null, 
             timerInterval: null, startTime: null,
             sessionStats: { totalWins: {}, gameWins: {} },
-            currentSession: null, 
+            currentSession: null,
+            endGameTimeout: null, 
         };
         
         let gamesCollection, playersCollection, sessionsCollection;
@@ -332,8 +333,8 @@
                 return;
             }
             try {
-                gamesCollection = collection(db, `artifacts/${appId}/users/${userId}/games`);
-                playersCollection = collection(db, `artifacts/${appId}/users/${userId}/players`);
+                gamesCollection = collection(db, `artifacts/${appId}/public/data/games`);
+                playersCollection = collection(db, `artifacts/${appId}/public/data/players`);
                 sessionsCollection = collection(db, `artifacts/${appId}/public/data/sessions`);
                 setupEventListeners();
                 loadInitialData();
@@ -379,6 +380,7 @@
             endRoundBtn.addEventListener('click', endRound);
             endGameEarlyBtn.addEventListener('click', () => updateSession({ "currentGame.isFinished": true }));
             returnToLobbyBtn.addEventListener('click', () => {
+                 if(state.endGameTimeout) clearTimeout(state.endGameTimeout);
                  updateSession({ currentGame: null });
             });
             lobbyGameSelect.addEventListener('change', (e) => updateSession({ selectedGameId: e.target.value }));
@@ -447,7 +449,7 @@
             state.currentSession.participants.forEach(p => {
                 const div = document.createElement('div');
                 div.className = 'bg-gray-700 p-3 rounded-md text-center';
-                div.innerHTML = `<p class="font-semibold truncate">${p.name || p.userId.substring(0,8)}</p>${p.userId === state.currentSession.hostId ? '<p class="text-xs text-indigo-400 font-bold">HOST</p>' : ''}`;
+                div.innerHTML = `<p class="font-semibold truncate">${p.name || p.userId.substring(0,8)}</p>`;
                 lobbyParticipantList.appendChild(div);
             });
             renderLobbyPlayerSelection();
@@ -493,6 +495,8 @@
 
         function updateUIBasedOnState(sessionData) {
             state.currentSession = sessionData;
+            state.games = sessionData.allGames || [];
+            state.players = sessionData.allPlayers || [];
             if (sessionData.currentGame) {
                 setupScreen.classList.add('hidden');
                 lobbyScreen.classList.add('hidden');
@@ -501,6 +505,7 @@
             } else {
                 setupScreen.classList.add('hidden');
                 gameScreen.classList.add('hidden');
+                endGameModal.classList.add('hidden'); // Ensure end game modal is hidden when going to lobby
                 lobbyScreen.classList.remove('hidden');
                 renderLobby();
             }
@@ -619,12 +624,13 @@
                 codeExists = docSnap.exists();
             }
             await setDoc(doc(sessionsCollection, newCode), {
-                hostId: userId,
                 participants: [{userId, name: hostName}],
                 currentGame: null,
                 createdAt: Date.now(),
                 selectedGameId: null,
                 lobbySelectedPlayerIds: [],
+                allGames: state.games, 
+                allPlayers: state.players,
             });
             subscribeToSession(newCode);
         }
@@ -661,10 +667,7 @@
             const sessionRef = doc(sessionsCollection, state.currentSession.id);
             const playerProfile = state.currentSession.participants.find(p => p.userId === userId);
             
-            if (state.currentSession.hostId === userId && state.currentSession.participants.length > 1) {
-                showNotification("Host can't leave a session with other players.", true);
-                return;
-            } else if(state.currentSession.hostId === userId) {
+            if(state.currentSession.participants.length <= 1) {
                  await deleteDoc(sessionRef);
             } else {
                 await updateDoc(sessionRef, { participants: arrayRemove(playerProfile) });
@@ -778,6 +781,12 @@
             renderFinalScores(players, condition);
             gameScreen.classList.add('hidden');
             endGameModal.classList.remove('hidden');
+
+            state.endGameTimeout = setTimeout(() => {
+                if (!endGameModal.classList.contains('hidden')) {
+                    updateSession({ currentGame: null });
+                }
+            }, 10000);
         }
 
         async function updateSession(updates) {
@@ -817,8 +826,8 @@
             catch (error) { showNotification('Error: Could not add player.', true); }
         }
         
-        async function deleteGame(gameId) { await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/games`, gameId)); }
-        async function deletePlayer(playerId) { await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/players`, playerId)); }
+        async function deleteGame(gameId) { await deleteDoc(doc(db, `artifacts/${appId}/public/data/games`, gameId)); }
+        async function deletePlayer(playerId) { await deleteDoc(doc(db, `artifacts/${appId}/public/data/players`, playerId)); }
 
         async function analyzeGameRules() {
             const rules = gameRulesInput.value;
