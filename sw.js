@@ -3,7 +3,7 @@ const CACHE_NAME = 'board-game-scorer-v26';
 
 // A list of the essential files the app needs to work offline.
 const urlsToCache = [
-  './', // The root of the site
+  './',
   './index.html',
   './manifest.json'
 ];
