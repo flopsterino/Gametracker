@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="https://placehold.co/192x192/000000/ffffff?text=BGS">
+    <link rel="icon" href="https://placehold.co/32x32/000000/ffffff?text=BGS" type="image/x-icon">
     <!-- Meta tags for iOS PWA behavior -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -217,8 +218,9 @@
             messagingSenderId: "960845458759",
             appId: "1:960845458759:web:9b0e89be74d09910337062"
         };
+        const GEMINI_API_KEY = "AIzaSyD2PehrrJxKs2EWNsgkSR3k4GUKNg_QFf4";
 
-        const appId = 'gametracker-45957'; // Using your projectId as a default app ID
+        const appId = firebaseConfig.projectId; 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
@@ -496,6 +498,8 @@
 
         function updateUIBasedOnState(sessionData) {
             state.currentSession = sessionData;
+            state.games = sessionData.allGames || [];
+            state.players = sessionData.allPlayers || [];
             if (sessionData.currentGame) {
                 setupScreen.classList.add('hidden');
                 lobbyScreen.classList.add('hidden');
@@ -628,6 +632,8 @@
                 createdAt: Date.now(),
                 selectedGameId: null,
                 lobbySelectedPlayerIds: [],
+                allGames: state.games, 
+                allPlayers: state.players,
             });
             subscribeToSession(newCode);
         }
@@ -867,8 +873,7 @@
                     }
                 }
             };
-            const apiKey = "AIzaSyD2PehrrJxKs2EWNsgkSR3k4GUKNg_QFf4";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
             try {
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const result = await response.json();
