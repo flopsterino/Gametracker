@@ -572,7 +572,7 @@
                 const kingNames = kings.map(([playerId,]) => state.players.find(p => p.id === playerId)?.name || 'Unknown').join(' & ');
                 kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-widest">King of the Session</h4><p class="text-4xl font-extrabold text-white text-shadow-md">${kingNames} 👑</p><p class="text-lg font-semibold">${topWins} Total Wins</p>`;
             } else {
-                kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-wider">King of the Session</h4><p class="text-2xl font-bold">The Throne is Empty!</p><p class="text-sm">Play a game to crown a winner.</p>`;
+                kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-widest">King of the Session</h4><p class="text-2xl font-bold">The Throne is Empty!</p><p class="text-sm">Play a game to crown a winner.</p>`;
             }
             sessionLeaderboardContent.appendChild(kingOfTheHillBanner);
 
@@ -819,11 +819,8 @@
             if (!name || isNaN(winningScore) || winningScore <= 0) { showNotification('Please provide a valid name and score.', true); return; }
             const gameData = { name, winningScore, condition: gameConditionSelect.value, finalRoundMode: finalRoundModeCheckbox.checked, winCounts: {} };
             try { 
-                const newGameDoc = await addDoc(gamesCollection, gameData); 
+                await addDoc(gamesCollection, gameData); 
                 gameNameInput.value = ''; gameScoreInput.value = ''; gameRulesInput.value = '';
-                if(state.currentSession) {
-                    await updateDoc(doc(sessionsCollection, state.currentSession.id), { allGames: arrayUnion({...gameData, id: newGameDoc.id}) });
-                }
             } 
             catch (error) { showNotification('Error: Could not save game.', true); }
         }
@@ -839,11 +836,8 @@
             }
 
             try { 
-                const newPlayerDoc = await addDoc(playersCollection, { name: playerName, totalWins: 0, totalGamesPlayed: 0 }); 
+                await addDoc(playersCollection, { name: playerName, totalWins: 0, totalGamesPlayed: 0 }); 
                 if (!name) playerNameInput.value = ''; 
-                if(state.currentSession) {
-                    await updateDoc(doc(sessionsCollection, state.currentSession.id), { allPlayers: arrayUnion({id: newPlayerDoc.id, name: playerName, totalWins: 0, totalGamesPlayed: 0}) });
-                }
             } 
             catch (error) { showNotification('Error: Could not add player.', true); }
         }
