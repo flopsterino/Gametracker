@@ -148,16 +148,8 @@
                 <h3 class="text-2xl font-bold mb-4 text-white">Manage My Games</h3>
                  <div id="game-list" class="space-y-2 mb-4 max-h-40 overflow-y-auto"></div>
                 
-                 <div class="space-y-4 border-t border-gray-700 pt-4">
-                     <textarea id="game-rules-input" placeholder="Paste game rules here to analyze..." class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white h-24"></textarea>
-                     <button id="analyze-rules-btn" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md relative">
-                        Analyze Rules
-                        <div id="analyze-loader" class="hidden absolute right-4 top-1/2 -translate-y-1/2 loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-6 w-6"></div>
-                    </button>
-                 </div>
-
                 <div class="space-y-4 border-t border-gray-700 pt-4 mt-4">
-                    <h4 class="text-lg font-semibold">Or Add Manually:</h4>
+                    <h4 class="text-lg font-semibold">Add Manually:</h4>
                     <input type="text" id="game-name-input" placeholder="Game Name" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white">
                     <div>
                         <label id="score-input-label" for="game-score-input" class="block text-sm font-medium text-gray-300 mb-1">Winning Score</label>
@@ -211,15 +203,14 @@
         
         // --- Firebase Configuration ---
         const firebaseConfig = {
-            apiKey: "AIzaSyDlB0PII1L5M8ojUXXsQ5kkJB8jUACkyK0",
+            apiKey: "AIzaSyBa2VLlP26G3U5xlpqbLo-xr2pPPXNTllU",
             authDomain: "gametracker-45957.firebaseapp.com",
             projectId: "gametracker-45957",
             storageBucket: "gametracker-45957.appspot.com",
             messagingSenderId: "960845458759",
             appId: "1:960845458759:web:9b0e89be74d09910337062"
         };
-        const GEMINI_API_KEY = "AIzaSyD2PehrrJxKs2EWNsgkSR3k4GUKNg_QFf4";
-
+        
         const appId = firebaseConfig.projectId; 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
@@ -266,9 +257,6 @@
         const scoreInputLabel = document.getElementById('score-input-label');
         const gameConditionSelect = document.getElementById('game-condition-select');
         const finalRoundModeCheckbox = document.getElementById('final-round-mode-checkbox');
-        const gameRulesInput = document.getElementById('game-rules-input');
-        const analyzeRulesBtn = document.getElementById('analyze-rules-btn');
-        const analyzeLoader = document.getElementById('analyze-loader');
         const playerList = document.getElementById('player-list');
         const addPlayerBtn = document.getElementById('add-player-btn');
         const playerNameInput = document.getElementById('player-name-input');
@@ -371,7 +359,6 @@
             saveGameBtn.addEventListener('click', saveGame);
             closePlayersModalBtn.addEventListener('click', () => managePlayersModal.classList.add('hidden'));
             addPlayerBtn.addEventListener('click', () => addPlayer());
-            analyzeRulesBtn.addEventListener('click', analyzeGameRules);
             viewLeaderboardBtn.addEventListener('click', () => { renderSessionLeaderboard(); leaderboardModal.classList.remove('hidden'); });
             closeLeaderboardModalBtn.addEventListener('click', () => leaderboardModal.classList.add('hidden'));
             newSessionBtn.addEventListener('click', startNewSession);
@@ -572,7 +559,7 @@
                 const kingNames = kings.map(([playerId,]) => state.players.find(p => p.id === playerId)?.name || 'Unknown').join(' & ');
                 kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-widest">King of the Session</h4><p class="text-4xl font-extrabold text-white text-shadow-md">${kingNames} 👑</p><p class="text-lg font-semibold">${topWins} Total Wins</p>`;
             } else {
-                kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-widest">King of the Session</h4><p class="text-2xl font-bold">The Throne is Empty!</p><p class="text-sm">Play a game to crown a winner.</p>`;
+                kingOfTheHillBanner.innerHTML = `<h4 class="text-sm uppercase font-bold tracking-wider">King of the Session</h4><p class="text-2xl font-bold">The Throne is Empty!</p><p class="text-sm">Play a game to crown a winner.</p>`;
             }
             sessionLeaderboardContent.appendChild(kingOfTheHillBanner);
 
@@ -845,57 +832,6 @@
         async function deleteGame(gameId) { await deleteDoc(doc(gamesCollection, gameId)); }
         async function deletePlayer(playerId) { await deleteDoc(doc(playersCollection, playerId)); }
 
-        async function analyzeGameRules() {
-            const rules = gameRulesInput.value;
-            if (!rules.trim()) { showNotification("Please paste some rules to analyze.", true); return; }
-            analyzeLoader.classList.remove('hidden');
-            analyzeRulesBtn.disabled = true;
-            const prompt = `You are a board game expert. Analyze the following game rules and extract the game's name, the score needed to win, the winning condition (highest or lowest score wins), and whether a final round is triggered after the score is reached. Provide the response as a JSON object with the keys "gameName", "winningScore", "winningCondition" (either "highest" or "lowest"), and "finalRoundMode" (boolean). If a value cannot be determined, return null for that key. Game Rules: ${rules}`;
-            let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
-            const payload = { 
-                contents: chatHistory,
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            "gameName": { "type": "STRING" },
-                            "winningScore": { "type": "NUMBER" },
-                            "winningCondition": { "type": "STRING" },
-                            "finalRoundMode": { "type": "BOOLEAN" }
-                        }
-                    }
-                }
-            };
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
-            try {
-                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                const result = await response.json();
-                if (result.candidates && result.candidates[0].content.parts[0].text) {
-                    const data = JSON.parse(result.candidates[0].content.parts[0].text);
-                    gameNameInput.value = data.gameName || '';
-                    if (data.winningScore) {
-                        gameScoreInput.value = Math.round(data.winningScore);
-                    } else {
-                        gameScoreInput.value = '';
-                    }
-                    if (data.winningCondition === 'highest' || data.winningCondition === 'lowest') {
-                        gameConditionSelect.value = data.winningCondition;
-                    }
-                    finalRoundModeCheckbox.checked = data.finalRoundMode || false;
-                    showNotification("Rules analyzed successfully!");
-                } else {
-                    throw new Error("Invalid response from AI.");
-                }
-            } catch (error) {
-                console.error("Error analyzing rules:", error);
-                showNotification("Could not analyze rules. Please try again or enter manually.", true);
-            } finally {
-                analyzeLoader.classList.add('hidden');
-                analyzeRulesBtn.disabled = false;
-            }
-        }
-
         function startGame() {
             const selectedGameId = state.currentSession.selectedGameId;
             const selectedPlayerIds = state.currentSession.lobbySelectedPlayerIds;
@@ -973,7 +909,7 @@
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
+                navigator.serviceWorker.register('./sw.js') 
                     .then(reg => console.log('Service worker registered.', reg))
                     .catch(err => console.log('Service worker registration failed: ', err));
             });
