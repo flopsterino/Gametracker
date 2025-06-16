@@ -203,7 +203,7 @@
         
         // --- Firebase Configuration ---
         const firebaseConfig = {
-            apiKey: "AIzaSyBa2VLlP26G3U5xlpqbLo-xr2pPPXNTllU",
+            apiKey: "AIzaSyDgk8vc_Xd14pORgWPxHCRQvuZ9zNIoj0Y",
             authDomain: "gametracker-45957.firebaseapp.com",
             projectId: "gametracker-45957",
             storageBucket: "gametracker-45957.appspot.com",
@@ -485,8 +485,8 @@
 
         function updateUIBasedOnState(sessionData) {
             state.currentSession = sessionData;
-            state.games = sessionData.allGames || [];
-            state.players = sessionData.allPlayers || [];
+            state.games = sessionData.allGames || state.games;
+            state.players = sessionData.allPlayers || state.players;
             if (sessionData.currentGame) {
                 setupScreen.classList.add('hidden');
                 lobbyScreen.classList.add('hidden');
