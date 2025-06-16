@@ -633,6 +633,15 @@
 
             if (docSnap.exists()) {
                 await updateDoc(sessionRef, { participants: arrayUnion({userId, name: playerName}) });
+                
+                const sessionData = docSnap.data();
+                const sessionPlayers = sessionData.allPlayers || [];
+                const isDuplicate = sessionPlayers.some(p => p.name.toLowerCase() === playerName.toLowerCase());
+                if(!isDuplicate) {
+                    const newPlayer = {id: `guest-${Date.now()}`, name: playerName, totalWins: 0, totalGamesPlayed: 0};
+                    await updateDoc(sessionRef, { allPlayers: arrayUnion(newPlayer) });
+                }
+                
                 subscribeToSession(code);
             } else {
                 showNotification("Game session not found.", true);
