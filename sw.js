@@ -1,12 +1,11 @@
 // A unique name for the cache. Using a version number helps in updating the cache when the app is updated.
-const CACHE_NAME = 'board-game-scorer-v24';
+const CACHE_NAME = 'board-game-scorer-v26';
 
 // A list of the essential files the app needs to work offline.
-// We are REMOVING the external Tailwind CSS URL from this list.
 const urlsToCache = [
-  '/', // The root of the site
-  'index.html',
-  'manifest.json',
+  './', // The root of the site
+  './index.html',
+  './manifest.json'
 ];
 
 // 'install' event: This is fired when the service worker is first installed.
@@ -25,6 +24,11 @@ self.addEventListener('install', event => {
 
 // 'fetch' event: This is fired for every request the PWA makes.
 self.addEventListener('fetch', event => {
+  // We don't want to cache requests to Firebase or Google APIs
+  if (event.request.url.startsWith('https://firestore.googleapis.com') || event.request.url.startsWith('https://generativelanguage.googleapis.com')) {
+    return;
+  }
+  
   // respondWith() hijacks the request and allows us to provide our own response.
   event.respondWith(
     // Check if the request is already in the cache.
