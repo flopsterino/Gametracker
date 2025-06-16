@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="https://placehold.co/192x192/000000/ffffff?text=BGS">
-    <!-- Meta tags for iOS PWA behavior -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -59,7 +58,6 @@
 
         <main id="main-content">
             <div id="setup-screen" class="space-y-6">
-                <!-- Join Game -->
                 <div>
                     <h2 class="text-2xl font-semibold mb-3 text-white">Join a Game Night</h2>
                     <div class="bg-gray-800 p-4 rounded-lg flex items-center gap-4">
@@ -70,7 +68,6 @@
 
                 <div class="text-center text-gray-400 font-bold">OR</div>
 
-                <!-- Create Game -->
                 <div>
                     <button id="create-game-night-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3 px-4 rounded-lg text-lg transition duration-300 transform hover:scale-105">Create a Game Night</button>
                 </div>
@@ -85,8 +82,7 @@
                 <div class="bg-gray-800 p-4 rounded-lg mb-6">
                     <h3 class="text-2xl font-bold mb-3">Connected Devices</h3>
                     <div id="lobby-participant-list" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <!-- JS will populate this -->
-                    </div>
+                        </div>
                 </div>
                 <div class="space-y-6">
                      <h2 class="text-2xl font-semibold text-white">Game Setup</h2>
@@ -203,10 +199,10 @@
         
         // --- Firebase Configuration ---
         const firebaseConfig = {
-            apiKey: "AIzaSyDgk8vc_Xd14pORgWPxHCRQvuZ9zNIoj0Y",
+            apiKey: "AIzaSyAMX4yftxjdWUbUO9LqK9NURj7yXTQ5LPs",
             authDomain: "gametracker-45957.firebaseapp.com",
             projectId: "gametracker-45957",
-            storageBucket: "gametracker-45957.appspot.com",
+            storageBucket: "gametracker-45957.firebasestorage.app",
             messagingSenderId: "960845458759",
             appId: "1:960845458759:web:9b0e89be74d09910337062"
         };
@@ -217,12 +213,7 @@
         const auth = getAuth(app);
         setLogLevel('debug');
 
-        let userId;
-        let unsubscribeSession = null; 
-
-        // DOM Elements (omitted for brevity)
-
-        // ... (The rest of the JavaScript code is identical to the last working version) ...
+        // ... (rest of the JavaScript code is identical to the last working version) ...
         
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
