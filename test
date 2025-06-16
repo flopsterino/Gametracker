@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Connection Test</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f0f0; padding: 2em; }
+        #status { font-size: 1.5em; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Firebase Connection Test</h1>
+    <p>This page will try to connect to your Firebase project and sign in anonymously.</p>
+    <p id="status">Attempting to connect...</p>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        
+        const statusEl = document.getElementById('status');
+        
+        // Your Firebase configuration object
+        const firebaseConfig = {
+            apiKey: "AIzaSyBa2VLlP26G3U5xlpqbLo-xr2pPPXNTllU",
+            authDomain: "gametracker-45957.firebaseapp.com",
+            projectId: "gametracker-45957",
+            storageBucket: "gametracker-45957.appspot.com",
+            messagingSenderId: "960845458759",
+            appId: "1:960845458759:web:9b0e89be74d09910337062"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            
+            console.log("Firebase initialized. Attempting sign-in...");
+            
+            signInAnonymously(auth)
+                .then(() => {
+                    statusEl.textContent = 'SUCCESS: Connected and signed in anonymously!';
+                    statusEl.style.color = 'green';
+                    console.log('Firebase anonymous sign-in successful.');
+                })
+                .catch((error) => {
+                    statusEl.textContent = `FAILURE: Could not sign in. Error: ${error.code} - ${error.message}`;
+                    statusEl.style.color = 'red';
+                    console.error("Firebase sign-in error:", error);
+                });
+
+        } catch (e) {
+            statusEl.textContent = `FAILURE: Could not initialize Firebase. Error: ${e.message}`;
+            statusEl.style.color = 'red';
+            console.error("Firebase initialization error:", e);
+        }
+    </script>
+</body>
+</html>
